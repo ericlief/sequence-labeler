@@ -19,11 +19,6 @@ language_model = LanguageModel(dictionary,
                                is_forward_lm,
                                hidden_size=2048,
                                nlayers=1)
-#language_model = LanguageModel(dictionary,
- #                              is_forward_lm,
-  #                             hidden_size=1,
-   #                            nlayers=1)
-
 
 # train your language model
 trainer = LanguageModelTrainer(language_model, corpus)
@@ -32,7 +27,4 @@ trainer.train('resources/taggers/language_model',
               sequence_length=250,
               mini_batch_size=100,
               max_epochs=5000)
-#trainer.train('resources/taggers/language_model',
-  #            sequence_length=24,
-   #           mini_batch_size=50,
-    #          max_epochs=150)
+ 
