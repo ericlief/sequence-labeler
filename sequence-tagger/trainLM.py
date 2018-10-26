@@ -23,7 +23,7 @@ language_model = LanguageModel(dictionary,
 # train your language model
 trainer = LanguageModelTrainer(language_model, corpus)
 
-trainer.train('resources/taggers/language_model',
+trainer.train('resources/taggers/language_models/fwd',
               sequence_length=250,
               mini_batch_size=100,
               max_epochs=5000)
