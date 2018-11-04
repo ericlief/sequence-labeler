@@ -14,11 +14,11 @@ print(len(dictionary.get_items()))
 print(dictionary.get_items())
 
 
-## get your corpus, process forward and at the character level
-##corpus = TextCorpus('/path/to/your/corpus',
-    #dictionary,
-    #is_forward_lm,
-    #character_level=True)
+# get your corpus, process forward and at the character level
+corpus = TextCorpus('/path/to/your/corpus',
+    dictionary,
+    is_forward_lm,
+    character_level=True)
 
 ## instantiate your language model, set hidden size and number of layers
 #language_model = LanguageModel(dictionary,
