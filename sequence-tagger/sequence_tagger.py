@@ -4,24 +4,28 @@ import numpy as np
 import tensorflow as tf
 import morpho_dataset
 from collections import deque
+import random
+import torch
 
 class SequenceTagger:
     def __init__(self, threads, seed=42):
         # Create an empty graph and a session
         graph = tf.Graph()
         graph.seed = seed
-        self.session = tf.Session(graph = graph, config=tf.ConfigProto(log_device_placement=False))
+        self.session = tf.Session(graph = graph, config=tf.ConfigProto(log_device_placement=True))
         self.lr = args.lr
         
-    def construct(self, args, num_words, num_chars, n_tags):
+    def construct(self, args, n_tags):
         with self.session.graph.as_default():
             
             # Inputs
             self.sentence_lens = tf.placeholder(tf.int32, [None], name="sentence_lens")
-            self.word_ids = tf.placeholder(tf.int32, [None, None], name="word_ids")
-            self.charseqs = tf.placeholder(tf.int32, [None, None], name="charseqs")
-            self.charseq_lens = tf.placeholder(tf.int32, [None], name="charseq_lens")
-            self.charseq_ids = tf.placeholder(tf.int32, [None, None], name="charseq_ids")
+            #self.word_ids = tf.placeholder(tf.int32, [None, None], name="word_ids")
+            #self.charseqs = tf.placeholder(tf.int32, [None, None], name="charseqs")
+            #self.charseq_lens = tf.placeholder(tf.int32, [None], name="charseq_lens")
+            #self.charseq_ids = tf.placeholder(tf.int32, [None, None], name="charseq_ids")
+            
+            self.embedded_sents = tf.placeholder(tf.float32, [None, None, 2048], name="embedded_sents")
             self.tags = tf.placeholder(tf.int32, [None, None], name="tags")
             self.is_training = tf.placeholder(tf.bool, [], name="is_training")
 
@@ -43,82 +47,84 @@ class SequenceTagger:
             # Add dropout
             cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.dropout, output_keep_prob=1-args.dropout)
             cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.dropout, output_keep_prob=1-args.dropout)
-            # Create word embeddings for num_words of dimensionality args.we_dim
-            # using `tf.get_variable`.
-            word_embeddings = tf.get_variable('word_embeddings', [num_words, args.we_dim])
             
-            # Embed self.word_ids according to the word embeddings, by utilizing
-            # `tf.nn.embedding_lookup`.
-            embedded_words = tf.nn.embedding_lookup(word_embeddings, self.word_ids) # which word ids?
+        
+            ## Create word embeddings for num_words of dimensionality args.we_dim
+            ## using `tf.get_variable`.
+            #word_embeddings = tf.get_variable('word_embeddings', [num_words, args.we_dim])
+            
+            ## Embed self.word_ids according to the word embeddings, by utilizing
+            ## `tf.nn.embedding_lookup`.
+            #embedded_words = tf.nn.embedding_lookup(word_embeddings, self.word_ids) # which word ids?
 
-            # Convolutional word embeddings (CNNE)
+            ## Convolutional word embeddings (CNNE)
 
-            # Generate character embeddings for num_chars of dimensionality args.cle_dim.
-            char_embeddings = tf.get_variable('char_embeddings', [num_chars, args.cle_dim])
+            ## Generate character embeddings for num_chars of dimensionality args.cle_dim.
+            #char_embeddings = tf.get_variable('char_embeddings', [num_chars, args.cle_dim])
             
-            # Embed self.charseqs (list of unique words in the batch) using the character embeddings.
-            embedded_chars = tf.nn.embedding_lookup(char_embeddings, self.charseqs)
-            #print(embedded_chars)
-            # For kernel sizes of {2..args.cnne_max}, do the following:
-            # - use `tf.layers.conv1d` on input embedded characters, with given kernel size
-            #   and `args.cnne_filters`; use `VALID` padding, stride 1 and no activation.
-            # - perform channel-wise max-pooling over the whole word, generating output
-            #   of size `args.cnne_filters` for every word.
-            #cnn_filter_no = 0
-            outputs = []
+            ## Embed self.charseqs (list of unique words in the batch) using the character embeddings.
+            #embedded_chars = tf.nn.embedding_lookup(char_embeddings, self.charseqs)
+            ##print(embedded_chars)
+            ## For kernel sizes of {2..args.cnne_max}, do the following:
+            ## - use `tf.layers.conv1d` on input embedded characters, with given kernel size
+            ##   and `args.cnne_filters`; use `VALID` padding, stride 1 and no activation.
+            ## - perform channel-wise max-pooling over the whole word, generating output
+            ##   of size `args.cnne_filters` for every word.
+            ##cnn_filter_no = 0
+            #outputs = []
             
-            # uncomment to manually to 1d conv
-            #embedded_chars_ = tf.expand_dims(embedded_chars, axis=1) # change to shape [n, 1, max_len, dim], so its like an image of height one
-            #print('expanded in', embedded_chars_)
-            for kernel_size in range(2, args.cnne_max + 1):
-                # Manual 1d conv
-                #filter_ = tf.get_variable('conv_filter'+str(kernel_size), shape=[1, kernel_size, args.cle_dim, args.cnne_filters])
-                #output = tf.nn.conv2d(embedded_chars_, filter_, strides=[1,1,1,1], padding='VALID', name='cnne_layer_'+str(kernel_size))
-                #output = tf.squeeze(output, axis=1) # remove extra dim
-                #print(output)
+            ## uncomment to manually to 1d conv
+            ##embedded_chars_ = tf.expand_dims(embedded_chars, axis=1) # change to shape [n, 1, max_len, dim], so its like an image of height one
+            ##print('expanded in', embedded_chars_)
+            #for kernel_size in range(2, args.cnne_max + 1):
+                ## Manual 1d conv
+                ##filter_ = tf.get_variable('conv_filter'+str(kernel_size), shape=[1, kernel_size, args.cle_dim, args.cnne_filters])
+                ##output = tf.nn.conv2d(embedded_chars_, filter_, strides=[1,1,1,1], padding='VALID', name='cnne_layer_'+str(kernel_size))
+                ##output = tf.squeeze(output, axis=1) # remove extra dim
+                ##print(output)
                  
-                #output = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', name='cnne_layer_'+str(kernel_size))
-                output = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                ##output = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', name='cnne_layer_'+str(kernel_size))
+                #output = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
                 
-                # Apply batch norm
-                if args.bn:
-                    output = tf.layers.batch_normalization(output, training=self.is_training, name='cnn_layer_BN_'+str(kernel_size))
-                output = tf.nn.relu(output, name='cnn_layer_relu_'+str(kernel_size))
-                pooling = tf.reduce_max(output, axis=1)
+                ## Apply batch norm
+                #if args.bn:
+                    #output = tf.layers.batch_normalization(output, training=self.is_training, name='cnn_layer_BN_'+str(kernel_size))
+                #output = tf.nn.relu(output, name='cnn_layer_relu_'+str(kernel_size))
+                #pooling = tf.reduce_max(output, axis=1)
                 
-                #print(pooling)
-                #cnn_layer_no += 1
-                outputs.append(pooling)
+                ##print(pooling)
+                ##cnn_layer_no += 1
+                #outputs.append(pooling)
                 
                 
-            # TODO: Concatenate the computed features (in the order of kernel sizes 2..args.cnne_max).
-            # Consequently, each word from `self.charseqs` is represented using convolutional embedding
-            # (CNNE) of size `(args.cnne_max-1)*args.cnne_filters`.
-            concat_output = tf.concat(outputs, axis=-1)
-            #print(concat_output)
-            # TODO: Generate CNNEs of all words in the batch by indexing the just computed embeddings
-            # by self.charseq_ids (using tf.nn.embedding_lookup).
-            cnne = tf.nn.embedding_lookup(concat_output, self.charseq_ids)
-            #print('cnne', cnne)
-            # TODO: Concatenate the word embeddings (computed above) and the CNNE (in this order).
-            embedded_inputs = tf.concat([embedded_words, cnne], axis=-1)
-            #print('emb in', embedded_inputs)
+            ## TODO: Concatenate the computed features (in the order of kernel sizes 2..args.cnne_max).
+            ## Consequently, each word from `self.charseqs` is represented using convolutional embedding
+            ## (CNNE) of size `(args.cnne_max-1)*args.cnne_filters`.
+            #concat_output = tf.concat(outputs, axis=-1)
+            ##print(concat_output)
+            ## TODO: Generate CNNEs of all words in the batch by indexing the just computed embeddings
+            ## by self.charseq_ids (using tf.nn.embedding_lookup).
+            #cnne = tf.nn.embedding_lookup(concat_output, self.charseq_ids)
+            ##print('cnne', cnne)
+            ## TODO: Concatenate the word embeddings (computed above) and the CNNE (in this order).
+            ##embedded_inputs = tf.concat([embedded_words, cnne], axis=-1)
+            ##print('emb in', embedded_inputs)
+           
             # TODO(we): Using tf.nn.bidirectional_dynamic_rnn, process the embedded inputs.
             # Use given rnn_cell (different for fwd and bwd direction) and self.sentence_lens.
-            outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, cell_bw=cell_bw, inputs=embedded_inputs, sequence_length=self.sentence_lens, dtype=tf.float32)
+            outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, cell_bw=cell_bw, inputs=self.embedded_sents, sequence_length=self.sentence_lens, dtype=tf.float32)
             #output1 = tf.nn.batch_normalization(outputs[0], training=self.is_training, name='birnn_bn1'+str(kernel_size))
             #output1 = tf.nn.relu(output1, name='birnn_relu1'+str(kernel_size))
             #output2 = tf.nn.batch_normalization(outputs[0], training=self.is_training, name='birnn_bn2'+str(kernel_size))
             #output2 = tf.nn.relu(output2, name='birnn_relu2'+str(kernel_size))
             
-    
             # Concatenate the outputs for fwd and bwd directions (in the third dimension).
             #print('out', outputs, outputs[0])
             out_concat = tf.concat(outputs, axis=-1)
             #print('out concat', outputs)
             
             # Add a dense layer (without activation) into num_tags classes 
-            unary_scores = tf.layers.dense(out_concat, n_tags) 
+            logits = tf.layers.dense(out_concat, n_tags) 
             
             # Generate `weights` as a 1./0. mask of valid/invalid words (using `tf.sequence_mask`).
             weights = tf.sequence_mask(self.sentence_lens, dtype=tf.float32)
@@ -127,18 +133,19 @@ class SequenceTagger:
             if args.use_crf:
                 # Compute log likelihood and transition parameters using tf.contrib.crf.crf_log_likelihood
                 # and store the mean of sentence losses into `loss`.
-                log_likelihood, transition_probs = tf.contrib.crf.crf_log_likelihood(unary_scores, self.tags, self.sentence_lens)
+                log_likelihood, transition_probs = tf.contrib.crf.crf_log_likelihood(logits, self.tags, self.sentence_lens)
                 self.loss = tf.reduce_mean(-log_likelihood)
                 self.reduc_loss = self.loss
                 # Compute the CRF predictions into `self.predictions` with `crf_decode`.
-                self.predictions, _ = tf.contrib.crf.crf_decode(unary_scores, transition_probs, self.sentence_lens)
+                self.predictions, _ = tf.contrib.crf.crf_decode(logits, transition_probs, self.sentence_lens)
             else:             
-                self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.tags, logits=output_layer, weights=weights)
-                self.reduc_loss = tf.reduce_sum(self.loss)
+                self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.tags, logits=logits, weights=weights)
+                self.reduc_loss = tf.reduce_sum(self.loss) # change to mean
                 #print("loss", self.reduc_loss)
                 # Generate `self.predictions`.
-                self.predictions = tf.argmax(output_layer, axis=-1) # 3rd dim!                
+                self.predictions = tf.argmax(logits, axis=-1) # 3rd dim!                
             
+             
             # To store previous losses for LRReductionOnPlateau
             self.losses = deque([], maxlen=args.patience+1)
             
@@ -250,43 +257,159 @@ class SequenceTagger:
             self.lr = args.annealing_factor * self.lr
             print("to ", self.lr)
 
-    def train_epoch(self, train, batch_size):
-        while not train.epoch_finished():
-            sentence_lens, word_ids, charseq_ids, charseqs, charseq_lens = train.next_batch(batch_size, including_charseqs=True)
-            self.session.run(self.reset_metrics)
-            #loss = self.session.run(self.loss)
-            #self.losses[0] = loss
-            #self.losses.put([1:-1]
-            _, _, loss = self.session.run([self.training, self.summaries["train"], self.loss],
-                             {self.sentence_lens: sentence_lens,
-                              self.charseqs: charseqs[train.FORMS], self.charseq_lens: charseq_lens[train.FORMS],
-                              self.word_ids: word_ids[train.FORMS], self.charseq_ids: charseq_ids[train.FORMS],
-                              self.tags: word_ids[train.TAGS], self.is_training: True})
+    def train_epoch(self, batch, batch_size):
+        self.session.run(self.reset_metrics)
+        
+        # Embed sentences
+        clm_fw.embed(batch)        
+        batch.sort(key=lambda i: len(i), reverse=True)
+        max_sent_len = len(batch[0])
+        sent_lens = [len(s.tokens) for s in batch]
+        print("max sent len ", max_sent_len)
+        n_sents = len(sent_lens)
+        print("num sents ", n_sents)        
+        
+        # Pad sentences and tags
+        embedded_sents = np.zeros([n_sents, max_sent_len, clm_dim])
+        tags = np.zeros([n_sents, max_sent_len])
+        for i, s in enumerate(batch):
+            sent_len = len(s)            
+            embedded_sents[i, 0:sent_len] = torch.cat([t.get_embedding().unsqueeze(0)
+                                                     for t in s], 0).numpy()
+            tags[i, 0:sent_len] = [tag_dict.get_idx_for_item(t.get_tag(tag_type).value)
+                                              for t in s]    
+            #tags.append(sent_tags) 
             
-            self.reduce_lr_on_plateau(loss)
-            return loss
+            #print(tags)
+            #for j, t in enumerate(s):
+                #embedded_sents[i, j, :] = t.embedding.numpy()
+                
+        
+            #tags = [tag_dict.get_idx_for_item(t.get_tag(tag_type).value
+                                          #for t in sen)
+                    
+        
+        
+        _, _, loss, predictions = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
+                         {self.sentence_lens: sent_lens,
+                          self.embedded_sents: embedded_sents,
+                          self.tags: tags, self.is_training: True})
+        
+        #print("predictions\n")
+        #print([tag_dict.get_item_for_index(x) for s in predictions for x in s])
+        
+        #self.reduce_lr_on_plateau(loss)
+        
+        return loss
+        
+        #while not train.epoch_finished():
+            #sentence_lens, word_ids, charseq_ids, charseqs, charseq_lens = train.next_batch(batch_size, including_charseqs=True)
+            #self.session.run(self.reset_metrics)
+            ##loss = self.session.run(self.loss)
+            ##self.losses[0] = loss
+            ##self.losses.put([1:-1]
+            #_, _, loss = self.session.run([self.training, self.summaries["train"], self.loss],
+                             #{self.sentence_lens: sentence_lens,
+                              #self.charseqs: charseqs[train.FORMS], self.charseq_lens: charseq_lens[train.FORMS],
+                              #self.word_ids: word_ids[train.FORMS], self.charseq_ids: charseq_ids[train.FORMS],
+                              #self.tags: word_ids[train.TAGS], self.is_training: True})
+            
+            #self.reduce_lr_on_plateau(loss)
+            #return loss        
             
     def evaluate(self, dataset_name, dataset, batch_size):
         self.session.run(self.reset_metrics)
-        while not dataset.epoch_finished():
-            sentence_lens, word_ids, charseq_ids, charseqs, charseq_lens = dataset.next_batch(batch_size, including_charseqs=True)
-            self.session.run([self.update_accuracy, self.update_precision, self.update_recall, self.update_loss],
-                             {self.sentence_lens: sentence_lens,
-                              self.charseqs: charseqs[train.FORMS], self.charseq_lens: charseq_lens[train.FORMS],
-                              self.word_ids: word_ids[train.FORMS], self.charseq_ids: charseq_ids[train.FORMS],
-                              self.tags: word_ids[train.TAGS], self.is_training: False})
-        return self.session.run([self.current_accuracy, self.current_precision, self.current_recall, self.summaries[dataset_name]]) 
+        
+        # Embed sentences
+        clm_fw.embed(dataset)
+        dataset.sort(key=lambda i: len(i), reverse=True)
+        max_sent_len = len(dataset[0])
+        sent_lens = [len(s.tokens) for s in dataset]
+        n_sents = len(sent_lens)    
+        
+        # Pad sentences and tags
+        embedded_sents = np.zeros([n_sents, max_sent_len, clm_dim])
+        tags = np.zeros([n_sents, max_sent_len]) 
+        for i, s in enumerate(dataset):
+            sent_len = len(s)            
+            embedded_sents[i, 0:sent_len] = torch.cat([t.get_embedding().unsqueeze(0)
+                                                     for t in s], 0).numpy()
+            tags[i, 0:sent_len] = [tag_dict.get_idx_for_item(t.get_tag(tag_type).value)
+                                              for t in s]            
+        
+        
+        
+        
+        return self.session.run([self.update_accuracy, self.update_precision, self.update_recall, self.update_loss, self.predictions],
+                                                   {self.sentence_lens: sent_lens,
+                                                    self.embedded_sents: embedded_sents,
+                                                    self.tags: tags, self.is_training: False})
+           
+        #print("predictions\n")
+        #print([tag_dict.get_item_for_index(t) for s in predictions for t in s])
+        
+        
+        #while not dataset.epoch_finished():
+            #sentence_lens, word_ids, charseq_ids, charseqs, charseq_lens = dataset.next_batch(batch_size, including_charseqs=True)
+            #self.session.run([self.update_accuracy, self.update_precision, self.update_recall, self.update_loss],
+                             #{self.sentence_lens: sentence_lens,
+                              #self.charseqs: charseqs[train.FORMS], self.charseq_lens: charseq_lens[train.FORMS],
+                              #self.word_ids: word_ids[train.FORMS], self.charseq_ids: charseq_ids[train.FORMS],
+                              #self.tags: word_ids[train.TAGS], self.is_training: False})
+        #return self.session.run([self.current_accuracy, self.current_precision, self.current_recall, self.summaries[dataset_name]]) 
 
-    def predict(self, dataset, batch_size):
-        tags = []
-        while not dataset.epoch_finished():
-            sentence_lens, word_ids, charseq_ids, charseqs, charseq_lens = dataset.next_batch(batch_size, including_charseqs=True)
-            tags.extend(self.session.run(self.predictions,
-                                         {self.sentence_lens: sentence_lens,
-                                          self.charseqs: charseqs[train.FORMS], self.charseq_lens: charseq_lens[train.FORMS],
-                                          self.word_ids: word_ids[train.FORMS], self.charseq_ids: charseq_ids[train.FORMS], 
-                                          self.is_training: False}))
-        return tags
+    def predict(self, dataset):
+        
+        # Embed sentences
+        clm_fw.embed(dataset)
+        dataset.sort(key=lambda i: len(i), reverse=True)
+        max_sent_len = len(dataset[0])
+        sent_lens = [len(s.tokens) for s in dataset]
+        n_sents = len(sent_lens)    
+    
+        # Pad sentences
+        forms = []
+        gold = []
+        embedded_sents = np.zeros([n_sents, max_sent_len, clm_dim])
+        for i, s in enumerate(dataset):
+            sent_len = len(s)
+            forms.append([t.text for t in s])
+            embedded_sents[i, 0:sent_len] = torch.cat([t.get_embedding().unsqueeze(0)
+                                                           for t in s], 0).numpy()
+            gold.append([t.get_tag(tag_type).value for t in s])                    
+    
+        # Predict tags
+        tags = []   
+        predictions = self.session.run(self.predictions,
+                                     {self.sentence_lens: sent_lens,
+                                      self.embedded_sents: embedded_sents,
+                                      self.is_training: False})
+        print(predictions)
+        tags = [[tag_dict.get_item_for_index(t) for t in s] for s in predictions]
+        
+        
+        #tags.extend([[tag_dict.get_item_for_index(t) for s in self.session.run(self.predictions,
+                                     #{self.sentence_lens: sent_lens,
+                                      #self.embedded_sents: embedded_sents,
+                                      #self.is_training: False})] for t in s])
+    
+        #print("predictions\n")
+        #print([tag_dict.get_item_for_index(x) for x in tags])
+        print(forms)
+        print(tags)
+        print(gold)
+        return forms, tags, gold
+        
+        
+        #tags = []
+        #while not dataset.epoch_finished():
+            #sentence_lens, word_ids, charseq_ids, charseqs, charseq_lens = dataset.next_batch(batch_size, including_charseqs=True)
+            #tags.extend(self.session.run(self.predictions,
+                                         #{self.sentence_lens: sentence_lens,
+                                          #self.charseqs: charseqs[train.FORMS], self.charseq_lens: charseq_lens[train.FORMS],
+                                          #self.word_ids: word_ids[train.FORMS], self.charseq_ids: charseq_ids[train.FORMS], 
+                                          #self.is_training: False}))
+        #return tags
 
 
 if __name__ == "__main__":
@@ -294,7 +417,11 @@ if __name__ == "__main__":
     import datetime
     import os
     import re
-
+    from flair.data_fetcher import NLPTaskDataFetcher
+    from flair.embeddings import CharLMEmbeddings
+    from flair.data import Sentence
+    import numpy as np
+    
     # Fix random seed
     np.random.seed(42)
 
@@ -319,7 +446,7 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", default=.5, type=float, help="Dropout rate.")
     parser.add_argument("--bn", default=False, type=bool, help="Batch normalization.")
     parser.add_argument("--clip_gradient", default=.25, type=float, help="Norm for gradient clipping.")
-    parser.add_argument("--use_crf", default=True, type=bool, help="Use conditional random field.")
+    parser.add_argument("--use_crf", default=False, type=bool, help="Use conditional random field.")
     
     
     args = parser.parse_args()
@@ -339,49 +466,109 @@ if __name__ == "__main__":
     #train = morpho_dataset.MorphoDataset("/home/liefe/data/pt/harem/train_harem_iob2.conll")
     #dev = morpho_dataset.MorphoDataset("/home/liefe/data/pt/harem/dev_harem_iob2.conll", train=train, shuffle_batches=False)
     #test = morpho_dataset.MorphoDataset("/home/liefe/data/pt/harem/test_harem_iob2.conll", train=train, shuffle_batches=False)
-    train = morpho_dataset.MorphoDataset("/home/liefe/data/pt/UD_Portuguese-Bosque/pt_bosque-ud-train.conllu")
-    dev = morpho_dataset.MorphoDataset("/home/liefe/data/pt/UD_Portuguese-Bosque/pt_bosque-ud-dev.conllu", train=train, shuffle_batches=False)
-    test = morpho_dataset.MorphoDataset("/home/liefe/data/pt/UD_Portuguese-Bosque/pt_bosque-ud-test.conllu", train=train, shuffle_batches=False)
+    #train = morpho_dataset.MorphoDataset("/home/liefe/data/pt/UD_Portuguese-Bosque/pt_bosque-ud-train.conllu")
+    #dev = morpho_dataset.MorphoDataset("/home/liefe/data/pt/UD_Portuguese-Bosque/pt_bosque-ud-dev.conllu", train=train, shuffle_batches=False)
+    #test = morpho_dataset.MorphoDataset("/home/liefe/data/pt/UD_Portuguese-Bosque/pt_bosque-ud-test.conllu", train=train, shuffle_batches=False)
     
     
-    print("train, stats", len(train.factors[train.FORMS].words), len(train.factors[train.FORMS].alphabet),
-                      len(train.factors[train.TAGS].words))
+    #print("train, stats", len(train.factors[train.FORMS].words), len(train.factors[train.FORMS].alphabet),
+                      #len(train.factors[train.TAGS].words))
     
-    print("tags", train.factors[train.TAGS].words)
+    #print("tags", train.factors[train.TAGS].words)
+    
+    print("use crf ", args.use_crf)
+
+    # Get the corpus
+    train_fh = "/home/liefe/data/pt/UD_Portuguese-Bosque"
+    cols = {1:"text", 2:"lemma", 3:"pos"}
+    corpus = NLPTaskDataFetcher.fetch_column_corpus(train_fh, cols, 
+                                                    train_file="train.txt",
+                                                    dev_file="dev.txt", 
+                                                    test_file="test.txt").downsample(.10)
+    
+
+    
+    # Load Character Language Models (clms)
+    clm_fw = CharLMEmbeddings("/home/liefe/code/sequence-tagger/sequence-tagger/resources/taggers/language_models/fwd/best-lm.pt")    
+    clm_dim = 2048
+    
+    # What tag do we want to predict?
+    tag_type = "pos"
+    
+    # Make the tag dictionary from the corpus
+    tag_dict = corpus.make_tag_dictionary(tag_type=tag_type)
+    n_tags = len(tag_dict)
     
     # Construct the tagger
     tagger = SequenceTagger(threads=args.threads)
-    tagger.construct(args, len(train.factors[train.FORMS].words), len(train.factors[train.FORMS].alphabet),
-                      len(train.factors[train.TAGS].words))
-
-    # Train
-    for i in range(args.epochs):
-        print("epoch ", i)
-        #with tagger.session as default:
-        #loss = tagger.session.run(tagger.reduc_loss,
-                         #{tagger.sentence_lens: sentence_lens,
-                          #tagger.charseqs: charseqs[train.FORMS], tagger.charseq_lens: tagger[train.FORMS],
-                          #tagger.word_ids: word_ids[train.FORMS], tagger.charseq_ids: charseq_ids[train.FORMS],
-                          #tagger.tags: word_ids[train.TAGS], tagger.is_training: True})            
-        loss = tagger.train_epoch(train, args.batch_size)
-        print("loss ", loss, "lr, ", tagger.lr)        
-        accuracy, precision, recall, _ = tagger.evaluate("dev", dev, args.batch_size)
-        print("accuracy = {:.2f}".format(100 * accuracy))
-        print("precision = {:.2f}".format(100 * precision))
-        print("recall = {:.2f}".format(100 * recall))
+    #tagger.construct(args, len(train.factors[train.FORMS].words), len(train.factors[train.FORMS].alphabet),
+                      #len(train.factors[train.TAGS].words))
+    tagger.construct(args, n_tags)
         
-        # Stop if lr becomes to small
-        if tagger.lr < .001:
-            print("Exiting, lr has become to small: ", tagger.lr)
-            break
+    # Train
+       
+    train_data = corpus.train
+    dev_data = corpus.dev
+    for e in range(args.epochs):
+        random.shuffle(train_data)
+        batches = [train_data[i:i + args.batch_size] for i in range(0, len(train_data), args.batch_size)]
+        for i, batch in enumerate(batches):
+            print("epoch\t", e, "\tbatch\t", i)
+            loss = tagger.train_epoch(batch, args.batch_size)
+            print("loss\t", loss, "\tlr\t", tagger.lr)        
+            accuracy, precision, recall, _, _ = tagger.evaluate("dev", dev_data, args.batch_size)
+            #[self.update_accuracy, self.update_precision, self.update_recall, self.update_loss, self.predictions
+            print("accuracy = {:.2f}".format(100 * accuracy))
+            print("precision = {:.2f}".format(100 * precision))
+            print("recall = {:.2f}".format(100 * recall))
+            
+            # Stop if lr becomes to small
+            if tagger.lr < .001:
+                print("Exiting, lr has become to small: ", tagger.lr)
+                break        
+    
+    
+    
+    
+    
+    
+    
+    #for i in range(args.epochs):
+        #print("epoch ", i)
+        ##with tagger.session as default:
+        ##loss = tagger.session.run(tagger.reduc_loss,
+                         ##{tagger.sentence_lens: sentence_lens,
+                          ##tagger.charseqs: charseqs[train.FORMS], tagger.charseq_lens: tagger[train.FORMS],
+                          ##tagger.word_ids: word_ids[train.FORMS], tagger.charseq_ids: charseq_ids[train.FORMS],
+                          ##tagger.tags: word_ids[train.TAGS], tagger.is_training: True})            
+        #loss = tagger.train_epoch(train, args.batch_size)
+        #print("loss ", loss, "lr, ", tagger.lr)        
+        #accuracy, precision, recall, _ = tagger.evaluate("dev", dev, args.batch_size)
+        #print("accuracy = {:.2f}".format(100 * accuracy))
+        #print("precision = {:.2f}".format(100 * precision))
+        #print("recall = {:.2f}".format(100 * recall))
+        
+        ## Stop if lr becomes to small
+        #if tagger.lr < .001:
+            #print("Exiting, lr has become to small: ", tagger.lr)
+            #break
     
     # Predict test data
-    with open("{}/tagger_ner_test.txt".format(args.logdir), "w") as test_file:
-        forms = test.factors[test.FORMS].strings
-        gold = test.factors[test.TAGS].strings
-        tags = tagger.predict(test, args.batch_size)
+    
+    with open("{}/tagger_tag_test.txt".format(args.logdir), "w") as test_file:
+        #forms = test.factors[test.FORMS].strings
+        #gold = test.factors[test.TAGS].strings
+        #tags = tagger.predict(test, args.batch_size)
         #print(tags[:25])
+        
+        test_data = corpus.test
+        forms, tags, gold = tagger.predict(test_data)
         for s in range(len(forms)):
             for i in range(len(forms[s])):
-                print("{} {} {}".format(forms[s][i], gold[s][i], test.factors[test.TAGS].words[tags[s][i]]), file=test_file)
+                print(forms[s][i])
+                print(gold[s][i])
+                print(tags[s][i])
+                print("{} {} {}".format(forms[s][i], gold[s][i], tags[s][i]), file=test_file)
+                #print("{} {} {}".format(forms[s][i], gold[s][i], test.factors[test.TAGS].words[tags[s][i]]), file=test_file)
+                
             print("", file=test_file)
