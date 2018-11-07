@@ -124,7 +124,7 @@ class SequenceTagger:
             #print('out concat', outputs)
             
             # Add a dense layer (without activation) into num_tags classes 
-            unary_scores = tf.layers.dense(out_concat, n_tags) 
+            logits = tf.layers.dense(out_concat, n_tags) 
             
             # Generate `weights` as a 1./0. mask of valid/invalid words (using `tf.sequence_mask`).
             weights = tf.sequence_mask(self.sentence_lens, dtype=tf.float32)
@@ -133,17 +133,17 @@ class SequenceTagger:
             if args.use_crf:
                 # Compute log likelihood and transition parameters using tf.contrib.crf.crf_log_likelihood
                 # and store the mean of sentence losses into `loss`.
-                log_likelihood, transition_probs = tf.contrib.crf.crf_log_likelihood(unary_scores, self.tags, self.sentence_lens)
+                log_likelihood, transition_probs = tf.contrib.crf.crf_log_likelihood(logits, self.tags, self.sentence_lens)
                 self.loss = tf.reduce_mean(-log_likelihood)
                 self.reduc_loss = self.loss
                 # Compute the CRF predictions into `self.predictions` with `crf_decode`.
-                self.predictions, _ = tf.contrib.crf.crf_decode(unary_scores, transition_probs, self.sentence_lens)
+                self.predictions, _ = tf.contrib.crf.crf_decode(logits, transition_probs, self.sentence_lens)
             else:             
-                self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.tags, logits=output_layer, weights=weights)
-                self.reduc_loss = tf.reduce_sum(self.loss)
+                self.loss = tf.losses.sparse_softmax_cross_entropy(labels=self.tags, logits=logits, weights=weights)
+                self.reduc_loss = tf.reduce_sum(self.loss) # change to mean
                 #print("loss", self.reduc_loss)
                 # Generate `self.predictions`.
-                self.predictions = tf.argmax(output_layer, axis=-1) # 3rd dim!                
+                self.predictions = tf.argmax(logits, axis=-1) # 3rd dim!                
             
              
             # To store previous losses for LRReductionOnPlateau
@@ -298,7 +298,7 @@ class SequenceTagger:
         #print("predictions\n")
         #print([tag_dict.get_item_for_index(x) for s in predictions for x in s])
         
-        self.reduce_lr_on_plateau(loss)
+        #self.reduce_lr_on_plateau(loss)
         
         return loss
         
@@ -385,8 +385,8 @@ class SequenceTagger:
                                       self.embedded_sents: embedded_sents,
                                       self.is_training: False})
         print(predictions)
-        x = [[tag_dict.get_item_for_index(t) for t in s] for s in predictions]
-        print(x)
+        tags = [[tag_dict.get_item_for_index(t) for t in s] for s in predictions]
+        
         
         #tags.extend([[tag_dict.get_item_for_index(t) for s in self.session.run(self.predictions,
                                      #{self.sentence_lens: sent_lens,
@@ -446,7 +446,7 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", default=.5, type=float, help="Dropout rate.")
     parser.add_argument("--bn", default=False, type=bool, help="Batch normalization.")
     parser.add_argument("--clip_gradient", default=.25, type=float, help="Norm for gradient clipping.")
-    parser.add_argument("--use_crf", default=True, type=bool, help="Use conditional random field.")
+    parser.add_argument("--use_crf", default=False, type=bool, help="Use conditional random field.")
     
     
     args = parser.parse_args()
@@ -476,6 +476,7 @@ if __name__ == "__main__":
     
     #print("tags", train.factors[train.TAGS].words)
     
+    print("use crf ", args.use_crf)
 
     # Get the corpus
     train_fh = "/home/liefe/data/pt/UD_Portuguese-Bosque"
