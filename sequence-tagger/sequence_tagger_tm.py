@@ -7,7 +7,7 @@ from collections import deque
 import random
 import torch
 from torch._six import inf
-from collections import defaultdict
+
 
 class SequenceTagger:
     def __init__(self, threads, seed=42):
@@ -56,7 +56,7 @@ class SequenceTagger:
                                                          inputs=self.embedded_sents, 
                                                          sequence_length=self.sentence_lens, 
                                                          dtype=tf.float32,
-                                                         time_major=False)
+                                                         time_major=True)
             
             #output1 = tf.nn.batch_normalization(outputs[0], training=self.is_training, name='birnn_bn1'+str(kernel_size))
             #output1 = tf.nn.relu(output1, name='birnn_relu1'+str(kernel_size))
@@ -192,19 +192,25 @@ class SequenceTagger:
         # Embed sentences
         stacked_embedding.embed(batch)        
         batch.sort(key=lambda i: len(i), reverse=True)
+        # Sequence lengths
         max_sent_len = len(batch[0])
         sent_lens = [len(s.tokens) for s in batch]
+        sent_lens = np.array(sent_lens)
+        sent_lens.transpose()
+        print(len(sent_lens))
+              
         print("Max sentence length ", max_sent_len)
         n_sents = len(sent_lens)
         print("Number of sents ", n_sents)  
         embedding_dim = len(batch[0][0].get_embedding())
         print("Embedding dim: ", embedding_dim)
         
-        embedded_sents = np.zeros([n_sents, max_sent_len, embedding_dim])                
-        #embedded_sents = np.zeros([max_sent_len, n_sents, embedding_dim])        
+        #embedded_sents = np.zeros([n_sents, max_sent_len, embedding_dim])                
+        embedded_sents = np.zeros([max_sent_len, n_sents, embedding_dim])        
+        
         gold_tags_strings = []
-        gold_tags = np.zeros([n_sents, max_sent_len]) 
-        #gold_tags = np.zeros([max_sent_len, n_sents])        
+        #gold_tags = np.zeros([n_sents, max_sent_len]) 
+        gold_tags = np.zeros([max_sent_len, n_sents])        
         
         predicted_tags = np.zeros([n_sents, max_sent_len]) 
         for i, sentence in enumerate(batch):
@@ -213,10 +219,10 @@ class SequenceTagger:
                 #sent_len = len(s)     
                 #forms.append([t.text for t in s])
                 token = batch[i][j] 
-                #embedded_sents[j, i] = token.embedding.numpy() # convert torch tensor to numpy array
-                #gold_tags[j, i] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)      # tag index         
-                embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
-                gold_tags[i, j] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)      # tag index         
+                embedded_sents[j, i] = token.embedding.numpy() # convert torch tensor to numpy array
+                gold_tags[j, i] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)      # tag index         
+                #embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
+                #gold_tags[i, j] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)      # tag index         
         
         print('emb sent', embedded_sents.shape)
         ## Pad sentences and tags
@@ -249,8 +255,8 @@ class SequenceTagger:
                           self.embedded_sents: embedded_sents,
                           self.tags: gold_tags, self.is_training: True})
         
-        print("predictions\n", predictions)
-        print([tag_dict.get_item_for_index(x) for s in predictions for x in s])
+        #print("predictions\n")
+        #print([tag_dict.get_item_for_index(x) for s in predictions for x in s])
         
         #BUG: REDUCEONPLATAEU
         #self.reduce_lr_on_plateau(loss)
@@ -266,8 +272,6 @@ class SequenceTagger:
         
         batches = [dataset[x:x+batch_size] for x in range(0, len(dataset), batch_size)]
         
-        totals_per_tag = defaultdict(lambda: defaultdict(int))
-        totals = defaultdict(int)
         for batch in batches:
             
             # Embed sentences
@@ -286,7 +290,7 @@ class SequenceTagger:
             gold_tags = np.zeros([n_sents, max_sent_len]) 
             #gold_tags = np.zeros([max_sent_len, n_sents])        
             
-            #predicted_tags = np.zeros([n_sents, max_sent_len]) 
+            predicted_tags = np.zeros([n_sents, max_sent_len]) 
             for i, sentence in enumerate(batch):
                 for j in range(len(sentence)):
                     
@@ -299,58 +303,7 @@ class SequenceTagger:
                     gold_tags[i, j] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)      # tag index         
                     
                 #gold_tags_strings.append([t.get_tag(tag_type).value for t in s])                 
-                
-            acc, scores, loss, predicted_tag_ids =  self.session.run([self.update_accuracy, self.scores, self.update_loss, self.predictions],
-                                                               {self.sentence_lens: sent_lens,
-                                                                self.embedded_sents: embedded_sents,
-                                                                self.tags: gold_tags, self.is_training: False})   
             
-            print(len(predicted_tag_ids))
-            print(predicted_tag_ids)
-            print(scores)
-            
-            all_tokens = []
-            for sentence in batch:
-                tokens = sentence.tokens
-                all_tokens.extend(tokens)
-            
-            for (token, score, predicted_tag_id) in zip(all_tokens, scores, predicted_tag_ids):
-                predicted_tag = tag_dict.get_item_for_index(predicted_tag_id)
-                token.add_tag('predicted', predicted_tag, score)
-                
-        
-            for sentence in batch:
-                #for token in sentence.tokens:
-                    #predicted_tag = token.get_tag('predicted')
-                    
-                    ## append both to file for evaluation
-                    #eval_line = '{} {} {}\n'.format(token.text,
-                                                    #token.get_tag(self.model.tag_type).value,
-                                                    #predicted_tag.value)                    
-                    #lines.append(eval_line)
-                #lines.append('\n')                            
-        
-                gold_tags = [(tag.tag, str(tag)) for tag in sentence.get_spans(tag_type)]
-                predicted_tags = [(tag.tag, str(tag)) for tag in sentence.get_spans('predicted')]
-                for tag, pred in gold_tags:
-                    if (tag, pred) in predicted_tags:
-                        totals['tp'] += 1
-                        totals_per_tag[tag]['tp'] += 1
-                    else:
-                        totals['fn'] +=1
-                        totals_per_tag[tag]['fn'] += 1
-            
-                for tag, pred in predicted_tags:
-                    if (tag, pred) not in gold_tags:
-                        totals['fp'] += 1
-                        totals_per_tag[tag]['fp'] += 1 # fn?
-                    else:
-                        totals['fn'] +=1
-                        totals_per_tag[tag]['tp'] += 1 # tn?
-                     
-            self.print_metrics(totals, totals_per_tag)
-                
-            return acc, scores, loss                
             
             #for i, s in enumerate(batch):
                 #sent_len = len(s)     
@@ -374,7 +327,12 @@ class SequenceTagger:
                                                                #for t in s], 0).numpy()
                 #gold.append([t.get_tag(tag_type).value for t in s])                 
         
-            
+            acc, loss, predictions =  self.session.run([self.update_accuracy, self.update_loss, self.predictions],
+                                                       {self.sentence_lens: sent_lens,
+                                                        self.embedded_sents: embedded_sents,
+                                                        self.tags: gold_tags, self.is_training: False})   
+        
+        return acc, loss, predictions
             
             
         # Evaluate predictions
@@ -487,16 +445,7 @@ class SequenceTagger:
                                           #self.is_training: False}))
         #return tags
 
-    def print_metrics(self, totals, totals_per_tag):
-        accuracy = float(totals['tp']) + totals['tn'] / (totals['tp'] + totals['fp'] + totals['tn'] + totals['fn'])
-        precision = float(totals['tp']) / (totals['tp'] + totals['fp'])
-        recall = float(totals['tp']) / (totals['tp'] + totals['fn'])
-        f1 = 2 * precision * recall / (precison + recall)
-        print("accuracy = {:.2f}".format(100 * accuracy))
-        print("precision = {:.2f}".format(100 * precision))
-        print("recall = {:.2f}".format(100 * recall))
-        print("f1 = {:.2f}".format(100 * f1))
-        
+
 
 class ReduceLROnPlateau():
     """Reduce learning rate when a the loss has stopped improving.
@@ -600,9 +549,7 @@ class ReduceLROnPlateau():
             #print("to ", self.lr)
 
 
-  
-        
-        
+
 
 if __name__ == "__main__":
     import argparse
@@ -723,15 +670,11 @@ if __name__ == "__main__":
         for i, batch in enumerate(batches):
             print("epoch\t", e, "\tbatch\t", i)
             loss = tagger.train_epoch(batch, args.batch_size)
-            print("train loss\t", loss, "\tlr\t", tagger.lr)        
-            
             #accuracy, precision, recall, _, _ = tagger.evaluate("dev", dev_data, args.batch_size)
-            acc, scores, loss = tagger.evaluate("dev", dev_data, args.batch_size)     #return totals_per_tag, totals, scores, loss                
-      
+            accuracy, loss, pred = tagger.evaluate("dev", dev_data, args.batch_size)           
             #[self.update_accuracy, self.update_precision, self.update_recall, self.update_loss, self.predictions
-            print("dev loss\t", loss, "\tlr\t", tagger.lr)        
-            print("tf accuracy = {:.2f}".format(100 * acc))
-            
+            print("loss\t", loss, "\tlr\t", tagger.lr)        
+            print("accuracy = {:.2f}".format(100 * accuracy))
             #print("precision = {:.2f}".format(100 * precision))
             #print("recall = {:.2f}".format(100 * recall))
             
