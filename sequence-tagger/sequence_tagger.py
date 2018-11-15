@@ -93,7 +93,8 @@ class SequenceTagger:
                 self.reduc_loss = self.loss
                 # Compute the CRF predictions into `self.predictions` with `crf_decode`.
                 self.predictions, self.scores = tf.contrib.crf.crf_decode(logits, self.transition_params, self.sentence_lens)
-            
+                print('predicitons', self.predictions)
+                
             # Use local softmax decoding
             else:             
                 
@@ -194,11 +195,11 @@ class SequenceTagger:
         batch.sort(key=lambda i: len(i), reverse=True)
         max_sent_len = len(batch[0])
         sent_lens = [len(s.tokens) for s in batch]
-        print("Max sentence length ", max_sent_len)
+        #print("Max sentence length ", max_sent_len)
         n_sents = len(sent_lens)
-        print("Number of sents ", n_sents)  
+        #print("Number of sents ", n_sents)  
         embedding_dim = len(batch[0][0].get_embedding())
-        print("Embedding dim: ", embedding_dim)
+        #print("Embedding dim: ", embedding_dim)
         
         embedded_sents = np.zeros([n_sents, max_sent_len, embedding_dim])                
         #embedded_sents = np.zeros([max_sent_len, n_sents, embedding_dim])        
@@ -218,7 +219,7 @@ class SequenceTagger:
                 embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
                 gold_tags[i, j] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)      # tag index         
         
-        print('emb sent', embedded_sents.shape)
+        #print('emb sent', embedded_sents.shape)
         ## Pad sentences and tags
         #embedded_sents = np.zeros([n_sents, max_sent_len, embedding_dim])
         #gold_tags = np.zeros([n_sents, max_sent_len])
@@ -249,8 +250,8 @@ class SequenceTagger:
                           self.embedded_sents: embedded_sents,
                           self.tags: gold_tags, self.is_training: True})
         
-        print("predictions\n", predictions)
-        print([tag_dict.get_item_for_index(x) for s in predictions for x in s])
+        #print("predictions\n", predictions)
+        #print([tag_dict.get_item_for_index(x) for s in predictions for x in s])
         
         #BUG: REDUCEONPLATAEU
         #self.reduce_lr_on_plateau(loss)
@@ -261,11 +262,12 @@ class SequenceTagger:
         return loss
             
             
-    def evaluate(self, dataset_name, dataset, batch_size):
+    def evaluate(self, dataset_name, dataset, batch_size, test=False):
         self.session.run(self.reset_metrics)
-        
+        #print(dataset)
+        #print('len data', len(dataset))
         batches = [dataset[x:x+batch_size] for x in range(0, len(dataset), batch_size)]
-        
+        #print('dev baches', len(batches))
         totals_per_tag = defaultdict(lambda: defaultdict(int))
         totals = defaultdict(int)
         for batch in batches:
@@ -282,14 +284,17 @@ class SequenceTagger:
             embedded_sents = np.zeros([n_sents, max_sent_len, embedding_dim])
             #embedded_sents = np.zeros([max_sent_len, n_sents, embedding_dim])
             #forms = []
-            gold_tags_strings = []
+            #gold_tags_strings = []
             gold_tags = np.zeros([n_sents, max_sent_len]) 
             #gold_tags = np.zeros([max_sent_len, n_sents])        
             
+            cnt = 0
             #predicted_tags = np.zeros([n_sents, max_sent_len]) 
-            for i, sentence in enumerate(batch):
-                for j in range(len(sentence)):
-                    
+            #for i, sentence in enumerate(batch):
+                #for j in range(len(sentence)):
+            for i in range(n_sents):
+                for j in range(sent_lens[i]):                    
+                    cnt += 1
                     #sent_len = len(s)     
                     #forms.append([t.text for t in s])
                     token = batch[i][j] 
@@ -299,26 +304,56 @@ class SequenceTagger:
                     gold_tags[i, j] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)      # tag index         
                     
                 #gold_tags_strings.append([t.get_tag(tag_type).value for t in s])                 
-                
-            acc, scores, loss, predicted_tag_ids =  self.session.run([self.update_accuracy, self.scores, self.update_loss, self.predictions],
+            
+            if not test:    
+                _, _, predicted_tag_ids =  self.session.run([self.update_accuracy, self.update_loss, self.predictions],
                                                                {self.sentence_lens: sent_lens,
                                                                 self.embedded_sents: embedded_sents,
                                                                 self.tags: gold_tags, self.is_training: False})   
+            else:
+                predicted_tag_ids = self.session.run(self.predictions,
+                                             {self.sentence_lens: sent_lens,
+                                              self.embedded_sents: embedded_sents,
+                                              self.is_training: False})                
+                
+            #print(len(gold_tags))
+            #print(len(gold_tags.flatten()))
+            #print(len(predicted_tag_ids))
+            #print(predicted_tag_ids)
+            #print(len(predicted_tag_ids))
+            #print('gold', gold_tags[:, -5:])
+            #pred = np.array(predicted_tag_ids)
+            #print(pred.shape)
+            #print('pred', pred[:, -5:])            
+            #print(len(scores))
             
-            print(len(predicted_tag_ids))
-            print(predicted_tag_ids)
-            print(scores)
+            #predicted_tag_ids = predicted_tag_ids.flatten()
             
-            all_tokens = []
-            for sentence in batch:
-                tokens = sentence.tokens
-                all_tokens.extend(tokens)
+            #all_tokens = []
+            #for sentence in batch:
+                #tokens = sentence.tokens
+                #all_tokens.extend(tokens)
             
-            for (token, score, predicted_tag_id) in zip(all_tokens, scores, predicted_tag_ids):
-                predicted_tag = tag_dict.get_item_for_index(predicted_tag_id)
-                token.add_tag('predicted', predicted_tag, score)
+            #print(len(all_tokens))
+            #print(cnt)
+            #print(sum(sent_lens))
+            
+            #for (token, predicted_tag_id) in zip(all_tokens, predicted_tag_ids):
+                ##for (token, score, predicted_tag_id) in zip(all_tokens, scores, predicted_tag_ids):
+            
+                #predicted_tag = tag_dict.get_item_for_index(predicted_tag_id)
+                #token.add_tag('predicted', predicted_tag, 0)
                 
         
+            for i in range(n_sents):
+                for j in range(sent_lens[i]):
+                    token = batch[i][j]
+                    predicted_tag = tag_dict.get_item_for_index(predicted_tag_ids[i][j])
+                    token.add_tag('predicted', predicted_tag)
+                            
+                    
+                    
+                    
             for sentence in batch:
                 #for token in sentence.tokens:
                     #predicted_tag = token.get_tag('predicted')
@@ -332,25 +367,66 @@ class SequenceTagger:
         
                 gold_tags = [(tag.tag, str(tag)) for tag in sentence.get_spans(tag_type)]
                 predicted_tags = [(tag.tag, str(tag)) for tag in sentence.get_spans('predicted')]
-                for tag, pred in gold_tags:
-                    if (tag, pred) in predicted_tags:
+                #print(len(gold_tags), gold_tags)
+                #print(len(predicted_tags), predicted_tags)
+                
+                
+                for tag, pred in predicted_tags:
+                    #print(tag,pred)
+                    if (tag, pred) in gold_tags:
+                        #print('tp')
                         totals['tp'] += 1
                         totals_per_tag[tag]['tp'] += 1
                     else:
-                        totals['fn'] +=1
-                        totals_per_tag[tag]['fn'] += 1
+                        #print('fp')
+                        totals['fp'] +=1
+                        totals_per_tag[tag]['fp'] += 1
             
-                for tag, pred in predicted_tags:
-                    if (tag, pred) not in gold_tags:
-                        totals['fp'] += 1
-                        totals_per_tag[tag]['fp'] += 1 # fn?
+                for tag, gold in gold_tags:
+                    #print(tag,gold)
+                    if (tag, gold) not in predicted_tags:
+                        #print('fn')
+                        totals['fn'] += 1
+                        totals_per_tag[tag]['fn'] += 1  
                     else:
-                        totals['fn'] +=1
-                        totals_per_tag[tag]['tp'] += 1 # tn?
-                     
-            self.print_metrics(totals, totals_per_tag)
+                        #print('tn')
+                        totals['tn'] +=1
+                        totals_per_tag[tag]['tn'] += 1 # tn?
+        
+        if test:                
+            with open("{}/tagger_tag_test.txt".format(args.logdir), "w") as test_file:
+                for i in range(len(batches)):
+                    for j in range(len(batches[i])): 
+                        for k in range(len(batches[i][j])):
+                            token = batches[i][j][k]
+                            gold_tag = token.get_tag(tag_type).value
+                            predicted_tag = token.get_tag('predicted').value
+                            print("{} {} {}".format(token.text, gold_tag, predicted_tag), file=test_file)
+                        
+                #forms = test.factors[test.FORMS].strings
+                #gold_tags = test.factors[test.TAGS].strings
+                #tags = tagger.predict(test, args.batch_size)
+                #print(tags[:25])
                 
-            return acc, scores, loss                
+                #test_data = corpus.test
+                #forms, tags, gold = tagger.predict(test_data)
+                #for s in range(len(forms)):
+                    #for i in range(len(forms[s])):
+                        #print(forms[s][i])
+                        #print(gold_tags[s][i])
+                        #print(tags[s][i])
+                        #print("{} {} {}".format(forms[s][i], gold_tags[s][i], tags[s][i]), file=test_file)
+                        ###print("{} {} {}".format(forms[s][i], gold_tags[s][i], test.factors[test.TAGS].words[tags[s][i]]), file=test_file)                        
+                     
+        self.log_metrics(dataset_name, totals, totals_per_tag)
+        
+        
+        
+        
+        #return acc, scores, loss                
+            
+            
+            
             
             #for i, s in enumerate(batch):
                 #sent_len = len(s)     
@@ -487,17 +563,37 @@ class SequenceTagger:
                                           #self.is_training: False}))
         #return tags
 
-    def print_metrics(self, totals, totals_per_tag):
-        accuracy = float(totals['tp']) + totals['tn'] / (totals['tp'] + totals['fp'] + totals['tn'] + totals['fn'])
-        precision = float(totals['tp']) / (totals['tp'] + totals['fp'])
-        recall = float(totals['tp']) / (totals['tp'] + totals['fn'])
-        f1 = 2 * precision * recall / (precison + recall)
-        print("accuracy = {:.2f}".format(100 * accuracy))
-        print("precision = {:.2f}".format(100 * precision))
-        print("recall = {:.2f}".format(100 * recall))
-        print("f1 = {:.2f}".format(100 * f1))
-        
+    def log_metrics(self, dataset_name, totals, totals_per_tag):
 
+        with open("{}/metrics-{}.txt".format(args.logdir, dataset_name), "w") as f:
+           
+            # Total metrics
+            accuracy = (float(totals['tp']) + totals['tn']) / (totals['tp'] + totals['fp'] + totals['tn'] + totals['fn'])
+            precision = float(totals['tp']) / (totals['tp'] + totals['fp'])
+            recall = float(totals['tp']) / (totals['tp'] + totals['fn'])
+            f1 = 2 * precision * recall / (precision + recall)
+            f.write("acc {:.3f}\t prec {:.3f}\trec\t{:.3f}\tf1 {:.3f}\n".format(accuracy, precision, recall, f1))            
+            # Metrics per tag
+            for tag in totals_per_tag:
+                try: 
+                    accuracy = (float(totals_per_tag[tag]['tp']) + totals_per_tag[tag]['tn']) / (totals_per_tag[tag]['tp'] + totals_per_tag[tag]['fp'] + totals_per_tag[tag]['tn'] + totals_per_tag[tag]['fn'])
+                except ZeroDivisionError: 
+                    accuracy = 0
+                try: 
+                    precision = float(totals_per_tag[tag]['tp']) / (totals_per_tag[tag]['tp'] + totals_per_tag[tag]['fp'])
+                except ZeroDivisionError: 
+                    precision = 0
+                try: 
+                    recall = float(totals_per_tag[tag]['tp']) / (totals_per_tag[tag]['tp'] + totals_per_tag[tag]['fn'])
+                except ZeroDivisionError: 
+                    recall = 0
+                try:    
+                    f1 = 2 * precision * recall / (precision + recall)            
+                except ZeroDivisionError: 
+                    f1 = 0
+                
+                f.write("{}\tacc {:.3f}\t prec {:.3f}\trec\t{:.3f}\tf1 {:.3f}\n".format(tag, accuracy, precision, recall, f1))            
+            
 class ReduceLROnPlateau():
     """Reduce learning rate when a the loss has stopped improving.
         Models often benefit from reducing the learning rate by a factor
@@ -677,14 +773,16 @@ if __name__ == "__main__":
     corpus = NLPTaskDataFetcher.fetch_column_corpus(train_fh, cols, 
                                                     train_file="train.txt",
                                                     dev_file="dev.txt", 
-                                                    test_file="test.txt").downsample(.10)
+                                                    test_file="test.txt").downsample(.1)
     
 
     
     # Load Character Language Models (clms)
-    clm_fw = CharLMEmbeddings("/home/liefe/code/sequence-tagger/sequence-tagger/resources/taggers/language_models/fw2/best-lm.pt")  
-    clm_bw = CharLMEmbeddings("/home/liefe/code/sequence-tagger/sequence-tagger/resources/taggers/language_models/bw2/best-lm.pt")    
-    
+    clm_fw = CharLMEmbeddings("/home/liefe/lm/fwd/best-lm.pt")  
+    clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt")    
+    #clm_fw = CharLMEmbeddings("/home/liefe/code/sequence-tagger/sequence-tagger/resources/taggers/language_models/fw2/best-lm.pt")  
+    #clm_bw = CharLMEmbeddings("/home/liefe/code/sequence-tagger/sequence-tagger/resources/taggers/language_models/bw2/best-lm.pt")    
+        
     # Load festText word embeddings
     #word_embedding = WordEmbeddings("en")
     word_embedding = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
@@ -726,11 +824,12 @@ if __name__ == "__main__":
             print("train loss\t", loss, "\tlr\t", tagger.lr)        
             
             #accuracy, precision, recall, _, _ = tagger.evaluate("dev", dev_data, args.batch_size)
-            acc, scores, loss = tagger.evaluate("dev", dev_data, args.batch_size)     #return totals_per_tag, totals, scores, loss                
+            #acc, scores, loss = tagger.evaluate("dev", dev_data, args.batch_size)     #return totals_per_tag, totals, scores, loss                
+            tagger.evaluate("dev", dev_data, args.batch_size)     #return totals_per_tag, totals, scores, loss                
       
             #[self.update_accuracy, self.update_precision, self.update_recall, self.update_loss, self.predictions
-            print("dev loss\t", loss, "\tlr\t", tagger.lr)        
-            print("tf accuracy = {:.2f}".format(100 * acc))
+            #print("dev loss\t", loss, "\tlr\t", tagger.lr)        
+            #print("tf dev accuracy = {:.2f}".format(100 * acc))
             
             #print("precision = {:.2f}".format(100 * precision))
             #print("recall = {:.2f}".format(100 * recall))
@@ -741,6 +840,10 @@ if __name__ == "__main__":
                 break        
     
     # FIX NOT BREAKING FROM OUTER TRAIN
+    
+    test_data = corpus.test
+    tagger.evaluate("test", test_data, args.batch_size, test=True)
+    
     
     #with open("{}/tagger_tag_test.txt".format(args.logdir), "w") as test_file:
         ##forms = test.factors[test.FORMS].strings
