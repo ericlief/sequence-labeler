@@ -140,8 +140,8 @@ def get_spans(sent, tag_type: str, min_score=-1) -> List[Span]:
     return spans
 
 
-#fh = "/home/liefe/data/pt/harem/data/HAREM"
-fh = "/home/liefe/data/es/conll2002"
+fh = "/home/liefe/data/pt/harem/data/HAREM"
+#fh = "/home/liefe/data/es/conll2002"
 #cols = {1:"text", 2:"lemma", 3:"pos"}
 cols = {0:"text", 1:"ne"}     
 #cols = {0:"text", 1:"pos", 2:"ne"}     
@@ -149,7 +149,7 @@ corpus = NLPTaskDataFetcher.fetch_column_corpus(fh,
                                                 cols, 
                                                 train_file="train.txt",
                                                 dev_file="dev.txt", 
-                                                test_file="test.txt")
+                                                test_file="test.txt").downsample(.3) 
 
 
 
@@ -191,6 +191,14 @@ tagger = SequenceTagger(hidden_size=256,
 from flair.trainers import SequenceTaggerTrainer
 
 trainer = SequenceTaggerTrainer(tagger, corpus)
+
+# 7. start training
+trainer.train('resources/taggers/example-ner',
+              learning_rate=0.1,
+              mini_batch_size=32,
+              max_epochs=150,
+              patience=25,
+              embeddings_in_memory=False)
 
 # test embed
 #train_data = corpus.train
