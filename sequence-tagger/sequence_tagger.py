@@ -34,8 +34,8 @@ class SequenceTagger:
         # Make the tag dictionary from the corpus
         self.tag_dict = corpus.make_tag_dictionary(tag_type=tag_type)
         n_tags = len(self.tag_dict)
-        print(tag_type, self.tag_dict.idx2item)
-        print(corpus.train)
+        #print(tag_type, self.tag_dict.idx2item)
+        #print(corpus.train)
         
         # Create graph and session
         graph = tf.Graph()
@@ -409,24 +409,26 @@ class SequenceTagger:
                 
                 
                 for tag, pred in predicted_tags:
-                    print(tag,pred)
                     if (tag, pred) in gold_tags:
+                        
+                        print(tag,pred)
                         print('tp')
+                        
                         totals['tp'] += 1
                         totals_per_tag[tag]['tp'] += 1
                     else:
-                        print('fp')
+                        #print('fp')
                         totals['fp'] +=1
                         totals_per_tag[tag]['fp'] += 1
             
                 for tag, gold in gold_tags:
-                    print(tag,gold)
+                    #print(tag,gold)
                     if (tag, gold) not in predicted_tags:
-                        print('fn')
+                        #print('fn')
                         totals['fn'] += 1
                         totals_per_tag[tag]['fn'] += 1  
                     else:
-                        print('tn')
+                        #print('tn')
                         totals['tn'] +=1
                         totals_per_tag[tag]['tn'] += 1 # tn?
         
@@ -814,12 +816,12 @@ if __name__ == "__main__":
                                                     cols, 
                                                     train_file="train.txt",
                                                     dev_file="dev.txt", 
-                                                    test_file="test.txt") 
+                                                    test_file="test.txt").downsample(.2) 
     
 
     
     # Load Character Language Models (clms)
-    clm_fw = CharLMEmbeddings("/home/liefe/lm/fwd/best-lm.pt")  
+    clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt")  
     clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt")    
     #clm_fw = CharLMEmbeddings("/home/liefe/code/sequence-tagger/sequence-tagger/resources/taggers/language_models/fw2/best-lm.pt")  
     #clm_bw = CharLMEmbeddings("/home/liefe/code/sequence-tagger/sequence-tagger/resources/taggers/language_models/bw2/best-lm.pt")    
@@ -851,7 +853,7 @@ if __name__ == "__main__":
     #tagger.construct(args, n_tags)
         
     # Train
-    tagger.train(patience=4, checkpoint=True)   
+    tagger.train(patience=20, checkpoint=True)   
     #train_data = corpus.train
     #train_data = corpus.train # downsample training data to 10%
     
