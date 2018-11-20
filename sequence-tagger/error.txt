@@ -1,0 +1,73 @@
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+2018-11-20 00:38:50.893330: I tensorflow/core/platform/cpu_feature_guard.cc:141] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+2018-11-20 00:38:50.910418: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1432] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.62
+pciBusID: 0000:08:00.0
+totalMemory: 10.92GiB freeMemory: 9.99GiB
+2018-11-20 00:38:50.910451: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1511] Adding visible gpu devices: 0
+2018-11-20 00:38:59.392172: I tensorflow/core/common_runtime/gpu/gpu_device.cc:982] Device interconnect StreamExecutor with strength 1 edge matrix:
+2018-11-20 00:38:59.392520: I tensorflow/core/common_runtime/gpu/gpu_device.cc:988]      0 
+2018-11-20 00:38:59.392550: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1001] 0:   N 
+2018-11-20 00:38:59.393029: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1115] Created TensorFlow device (/job:localhost/replica:0/task:0/device:GPU:0 with 9657 MB memory) -> physical GPU (device: 0, name: GeForce GTX 1080 Ti, pci bus id: 0000:08:00.0, compute capability: 6.1)
+2018-11-20 00:39:14.652380: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 9.43G (10126334208 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652732: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 8.49G (9113700352 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652756: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 7.64G (8202330112 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652771: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 6.88G (7382096896 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652786: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 6.19G (6643887104 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652800: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 5.57G (5979497984 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652814: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 5.01G (5381548032 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652846: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 4.51G (4843393024 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652860: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 4.06G (4359053824 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652873: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 3.65G (3923148288 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652886: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 3.29G (3530833408 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652899: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 2.96G (3177750016 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652912: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 2.66G (2859974912 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652926: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 2.40G (2573977344 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652939: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 2.16G (2316579584 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652952: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 1.94G (2084921600 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652972: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 1.75G (1876429568 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652986: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 1.57G (1688786688 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.652999: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 1.42G (1519908096 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653013: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 1.27G (1367917312 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653026: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 1.15G (1231125504 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653039: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 1.03G (1108013056 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653054: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 951.01M (997211904 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653068: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 855.91M (897490688 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653081: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 770.32M (807741696 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653095: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 693.29M (726967552 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653109: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 623.96M (654270976 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653123: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 561.57M (588844032 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653137: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 505.41M (529959680 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-20 00:39:14.653151: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 454.87M (476963840 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/python/ops/gradients_impl.py:112: UserWarning: Converting sparse IndexedSlices to a dense Tensor of unknown shape. This may consume a large amount of memory.
+  "Converting sparse IndexedSlices to a dense Tensor of unknown shape. "
+Traceback (most recent call last):
+  File "/home/lief/tag/sequence_tagger.py", line 857, in <module>
+    tagger.train(patience=20, checkpoint=True)   
+  File "/home/lief/tag/sequence_tagger.py", line 277, in train
+    self.embedding.embed(batch)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/flair-0.3.1-py3.6.egg/flair/embeddings.py", line 116, in embed
+    embedding.embed(sentences)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/flair-0.3.1-py3.6.egg/flair/embeddings.py", line 49, in embed
+    self._add_embeddings_internal(sentences)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/flair-0.3.1-py3.6.egg/flair/embeddings.py", line 514, in _add_embeddings_internal
+    all_hidden_states_in_lm = self.lm.get_representation(sentences_padded, self.detach)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/flair-0.3.1-py3.6.egg/flair/models/language_model.py", line 100, in get_representation
+    prediction, rnn_output, hidden = self.forward(batch, hidden)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/flair-0.3.1-py3.6.egg/flair/models/language_model.py", line 71, in forward
+    output, hidden = self.rnn(emb, hidden)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/torch-0.4.1-py3.6-linux-x86_64.egg/torch/nn/modules/module.py", line 477, in __call__
+    result = self.forward(*input, **kwargs)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/torch-0.4.1-py3.6-linux-x86_64.egg/torch/nn/modules/rnn.py", line 192, in forward
+    output, hidden = func(input, self.all_weights, hx, batch_sizes)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/torch-0.4.1-py3.6-linux-x86_64.egg/torch/nn/_functions/rnn.py", line 324, in forward
+    return func(input, *fargs, **fkwargs)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/torch-0.4.1-py3.6-linux-x86_64.egg/torch/nn/_functions/rnn.py", line 288, in forward
+    dropout_ts)
+RuntimeError: CUDA error: out of memory
+======= EPILOG: Tue Nov 20 00:39:16 CET 2018
+== Limits:   mem_free=24G,act_mem_free=24G,h_vmem=24G,gpu=1,gpu_cc_min6.1=1,gpu_ram=11G
+== Usage:    cpu=00:00:10, mem=2.10295 GB s, io=0.09670 GB, vmem=875.820M, maxvmem=875.820M
+== Duration: 00:00:52 (52 s)
+== Server name: dll6
