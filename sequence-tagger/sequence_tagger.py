@@ -172,7 +172,7 @@ class SequenceTagger:
     def train(self, 
               lr=.1,
               batch_size=32,
-              dev_batch_size=32,
+              dev_batch_size=16,
               epochs=150,
               annealing_factor=.5,
               patience=5,
@@ -414,6 +414,7 @@ class SequenceTagger:
                             gold_tag = token.get_tag(self.tag_type).value
                             predicted_tag = token.get_tag('predicted').value
                             print("{} {} {}".format(token.text, gold_tag, predicted_tag), file=test_file)
+                        print("", file=test)
             return
         
         # Save and print metrics                  
@@ -594,22 +595,21 @@ if __name__ == "__main__":
                                                     test_file="test.txt")
     
 
+    # Load festText word embeddings 
+    word_embedding = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
+    
     # Load Character Language Models (clms)
     clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt")  
     clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt")    
     
-    # Load festText word embeddings 
-    word_embedding = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
-    
     # Instantiate StackedEmbeddings
-    #stacked_embedding = StackedEmbeddings(embeddings=[clm_fw, clm_bw])
-    stacked_embedding = StackedEmbeddings(embeddings=[clm_fw, clm_bw])
+    stacked_embedding = StackedEmbeddings(embeddings=[word_embedding, clm_fw, clm_bw])
     
     # Construct the tagger
     tagger = SequenceTagger(corpus, stacked_embedding, tag_type)
     
     # Train
-    tagger.train(epochs=150, patience=5, checkpoint=True)   
+    tagger.train(epochs=200, patience=20, checkpoint=True)   
      
     # Test 
     test_data = corpus.test
