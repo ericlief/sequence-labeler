@@ -210,7 +210,7 @@ class SequenceTagger:
                 # Remove super long sentences                
                 max_sent_len = len(batch[0])
                 #print("max sent len", max_sent_len)
-                while max_sent_len > 200:
+                while len(batch) > 1 and max_sent_len > 200:
                     #print("removing long sentence")
                     batch = batch[1:]
                     max_sent_len = len(batch[0])                    
@@ -414,7 +414,7 @@ class SequenceTagger:
                             gold_tag = token.get_tag(self.tag_type).value
                             predicted_tag = token.get_tag('predicted').value
                             print("{} {} {}".format(token.text, gold_tag, predicted_tag), file=test_file)
-                        print("", file=test)
+                        print("", file=test_file)
             return
         
         # Save and print metrics                  
@@ -586,6 +586,7 @@ if __name__ == "__main__":
     #tag_type = "pos"
     
     fh = "/home/liefe/data/pt/ner/harem" # ner
+    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
     cols = {0:"text", 1:"ne"}    
     tag_type = "ne"    
     corpus = NLPTaskDataFetcher.fetch_column_corpus(fh, 
@@ -597,10 +598,13 @@ if __name__ == "__main__":
 
     # Load festText word embeddings 
     word_embedding = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
+    #word_embedding = WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv")
     
     # Load Character Language Models (clms)
     clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt")  
     clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt")    
+    #clm_fw = CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt")
+    #clm_bw = CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt")
     
     # Instantiate StackedEmbeddings
     stacked_embedding = StackedEmbeddings(embeddings=[word_embedding, clm_fw, clm_bw])
@@ -609,7 +613,7 @@ if __name__ == "__main__":
     tagger = SequenceTagger(corpus, stacked_embedding, tag_type)
     
     # Train
-    tagger.train(epochs=200, patience=20, checkpoint=True)   
+    tagger.train(epochs=1, patience=20, checkpoint=True)   
      
     # Test 
     test_data = corpus.test
