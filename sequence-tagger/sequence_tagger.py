@@ -208,7 +208,7 @@ class SequenceTagger:
                 batch.sort(key=lambda i: len(i), reverse=True)
                 
                 # Remove super long sentences                
-                max_sent_len = len(batch[0])
+                
                 #print("max sent len", max_sent_len)
                 while len(batch) > 1 and max_sent_len > 200:
                     #print("removing long sentence")
@@ -313,7 +313,7 @@ class SequenceTagger:
             # Remove super long sentences                
             max_sent_len = len(batch[0])
             #print("max sent len", max_sent_len)
-            while max_sent_len > 200:
+            while len(batch) > 1 and max_sent_len > 200:
                 #print("removing long sentence")
                 batch = batch[1:]
                 max_sent_len = len(batch[0])                    
@@ -614,7 +614,7 @@ if __name__ == "__main__":
     tagger = SequenceTagger(corpus, stacked_embedding, tag_type)
     
     # Train
-    tagger.train(epochs=1, patience=20, checkpoint=True)   
+    tagger.train(epochs=150, patience=5, checkpoint=True)   
      
     # Test 
     test_data = corpus.test
