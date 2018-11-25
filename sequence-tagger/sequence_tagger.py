@@ -210,6 +210,7 @@ class SequenceTagger:
                 # Remove super long sentences                
                 
                 #print("max sent len", max_sent_len)
+                max_sent_len = len(batch[0])                                    
                 while len(batch) > 1 and max_sent_len > 200:
                     #print("removing long sentence")
                     batch = batch[1:]
@@ -575,8 +576,8 @@ if __name__ == "__main__":
     np.random.seed(42)
 
     # Create logdir name
-    #logdir = "logs/{}-{}".format(
-    logdir = "/home/lief/files/tagger/logs/{}-{}".format(
+    logdir = "logs/{}-{}".format(
+    #logdir = "/home/lief/files/tagger/logs/{}-{}".format(
     os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"))
     
@@ -587,25 +588,31 @@ if __name__ == "__main__":
     #tag_type = "pos"
     
     #fh = "/home/liefe/data/pt/ner/harem" # ner
-    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
-    cols = {0:"text", 1:"ne"}    
-    tag_type = "ne"    
+    ##fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
+    #cols = {0:"text", 1:"ne"}    
+    #tag_type = "ne"    
+
+
+    tag_type = "mwe"
+    fh = "/home/liefe/data/pt/mwe"
+    cols = {1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 10:"mwe"}
+
+
     corpus = NLPTaskDataFetcher.fetch_column_corpus(fh, 
                                                     cols, 
                                                     train_file="train.txt",
                                                     dev_file="dev.txt", 
                                                     test_file="test.txt")
-    
 
     # Load festText word embeddings 
-    #word_embedding = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
-    word_embedding = WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv")
+    word_embedding = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
+    #word_embedding = WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv")
     
     # Load Character Language Models (clms)
-    #clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt")  
-    #clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt")    
-    clm_fw = CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt")
-    clm_bw = CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt")
+    clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt")  
+    clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt")    
+    #clm_fw = CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt")
+    #clm_bw = CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt")
     
     # Instantiate StackedEmbeddings
     stacked_embedding = StackedEmbeddings(embeddings=[word_embedding, clm_fw, clm_bw])
@@ -614,7 +621,7 @@ if __name__ == "__main__":
     tagger = SequenceTagger(corpus, stacked_embedding, tag_type)
     
     # Train
-    tagger.train(epochs=150, patience=5, checkpoint=True)   
+    tagger.train(epochs=50, patience=5, checkpoint=True)   
      
     # Test 
     test_data = corpus.test
