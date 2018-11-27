@@ -227,7 +227,7 @@ class SequenceTagger:
                 
                 #print("max sent len", max_sent_len)
                 max_sent_len = len(batch[0])                                    
-                while len(batch) > 1 and max_sent_len > 200:
+                while len(batch) > 1 and max_sent_len > 100:
                     #print("removing long sentence")
                     batch = batch[1:]
                     max_sent_len = len(batch[0])                    
@@ -235,6 +235,7 @@ class SequenceTagger:
                 sent_lens = [len(s.tokens) for s in batch]
                 n_sents = len(sent_lens)     
                 
+                #print("embedding sents")
                 # Embed sentences using flair embeddings
                 self.embedding.embed(batch)            
                 
@@ -247,7 +248,10 @@ class SequenceTagger:
                 
                 for i in range(n_sents):
                     for j in range(sent_lens[i]):                    
-                        token = batch[i][j] 
+                        token = batch[i][j]
+                        
+                        print(len(token.text))
+                        
                         embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
                         if self.use_pos_tags:
                             pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
@@ -257,6 +261,7 @@ class SequenceTagger:
                         #embedded_sents[j, i] = token.embedding.numpy() # convert torch tensor to numpy array
                         #gold_tags[j, i] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)  
 
+                #print("running graph")
                 # Run graph for batch
                 if self.use_pos_tags:
                     _, _, loss, predicted_tag_ids = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
@@ -272,7 +277,7 @@ class SequenceTagger:
                                       self.gold_tags: gold_tags, 
                                       self.is_training: True})
                     
-                
+                #print("annotating tags")
                 # DEBUG: Add predicted tag to each token (annotate)    
                 for i in range(n_sents):
                     for j in range(sent_lens[i]):
@@ -326,6 +331,8 @@ class SequenceTagger:
                 print("Best model saved at ", save_path)
                                 
     def evaluate(self, dataset_name, dataset, eval_batch_size=32, epoch=None, test_mode=False, metric="accuracy"):
+        
+        print("evaluating")
         
         self.session.run(self.reset_metrics)  # for batch statistics
         # Get batches
@@ -650,33 +657,38 @@ if __name__ == "__main__":
 
     tag_type = "mwe"
     fh = "/home/liefe/data/pt/mwe"
-    cols = {1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 10:"mwe"}
+    #cols = {1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 10:"mwe"}
+    cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
 
-
+    print("getting corpus")
     corpus = NLPTaskDataFetcher.fetch_column_corpus(fh, 
                                                     cols, 
                                                     train_file="train.txt",
                                                     dev_file="dev.txt", 
-                                                    test_file="test.txt").downsample(.5)
+                                                    test_file="test.txt")
+    
 
     # Load festText word embeddings 
     word_embedding = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
     #word_embedding = WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv")
     
     # Load Character Language Models (clms)
-    clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt")  
-    clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt")    
+    clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache")  
+    clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache")    
     #clm_fw = CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt")
     #clm_bw = CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt")
     
+    print("getting embeddings")
     # Instantiate StackedEmbeddings
     stacked_embedding = StackedEmbeddings(embeddings=[word_embedding, clm_fw, clm_bw])
     
+    print("constructing tagger")
     # Construct the tagger
     tagger = SequenceTagger(corpus, stacked_embedding, tag_type)
     
+    print("beginning training")
     # Train
-    tagger.train(epochs=150, batch_size=16, patience=5, checkpoint=True)   
+    tagger.train(epochs=150, batch_size=8, dev_batch_size=8, patience=20, checkpoint=True)   
      
     # Test 
     test_data = corpus.test
