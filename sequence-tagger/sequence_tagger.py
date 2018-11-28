@@ -24,7 +24,9 @@ class SequenceTagger:
                  use_crf=True,
                  use_pos_tags=False,
                  threads=1, 
-                 seed=42):                  
+                 seed=42,
+                 restore_model=False,
+                 model_path=None):                  
         
         self.corpus = corpus # flair corpus type: List of Sentences  
         self.embedding = embedding # flair LM embedding or stacked type
@@ -50,9 +52,9 @@ class SequenceTagger:
         self.session = tf.Session(graph = graph, config=tf.ConfigProto(log_device_placement=False))
         
         # Construct graph
-        self.construct(rnn_cell, rnn_dim, optimizer, momentum, dropout, clip_gradient, n_tags, use_crf)
+        self.construct(rnn_cell, rnn_dim, optimizer, momentum, dropout, clip_gradient, n_tags, use_crf, restore_model, model_path)
         
-    def construct(self, rnn_cell, rnn_dim, optimizer, momentum, dropout, clip_gradient, n_tags, use_crf):
+    def construct(self, rnn_cell, rnn_dim, optimizer, momentum, dropout, clip_gradient, n_tags, use_crf, restore_model, model_path):
         
         with self.session.graph.as_default():
 
@@ -177,11 +179,15 @@ class SequenceTagger:
                     self.summaries[dataset] = [tf.contrib.summary.scalar(dataset + "/loss", self.current_loss),
                                                tf.contrib.summary.scalar(dataset + "/accuracy", self.current_accuracy)]
                                                
-            # Save model
+            # To save model
             self.saver = tf.train.Saver()
             
-            # Initialize variables
-            self.session.run(tf.global_variables_initializer())
+            if restore_model:
+                self.saver.restore(self.session, model_path)  # restore model
+                print("Restoring model from ", model_path)
+            else:
+                self.session.run(tf.global_variables_initializer())                 # initialize variables
+            
             with summary_writer.as_default():
                 tf.contrib.summary.initialize(session=self.session, graph=self.session.graph)
 
@@ -668,8 +674,9 @@ if __name__ == "__main__":
     fh = "/home/liefe/data/pt/mwe"
     #cols = {1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 10:"mwe"}
     cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
-
-    print("getting corpus")
+    
+    # Fetch corpus
+    print("Getting corpus")
     corpus = NLPTaskDataFetcher.fetch_column_corpus(fh, 
                                                     cols, 
                                                     train_file="train.txt",
@@ -687,17 +694,19 @@ if __name__ == "__main__":
     #clm_fw = CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt")
     #clm_bw = CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt")
     
-    print("getting embeddings")
     # Instantiate StackedEmbeddings
-    stacked_embedding = StackedEmbeddings(embeddings=[word_embedding, clm_fw, clm_bw])
+    print("Getting embeddings")    
+    stacked_embeddings = StackedEmbeddings(embeddings=[word_embedding, clm_fw, clm_bw])
     
-    print("constructing tagger")
     # Construct the tagger
-    tagger = SequenceTagger(corpus, stacked_embedding, tag_type)
+    print("Constructing tagger")
+    path = "/home/liefe/code/sequence-tagger/sequence-tagger/logs/mwe-150-8-8-20/best-model.ckpt"
+    tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
+    #tagger = SequenceTagger(corpus, stacked_embedding, tag_type)
     
-    print("beginning training")
     # Train
-    tagger.train(epochs=150, batch_size=8, dev_batch_size=8, patience=20, checkpoint=True, embeddings_in_memory=False)   
+    print("Beginning training")    
+    tagger.train(epochs=150, batch_size=16, dev_batch_size=16, patience=20, checkpoint=True, embeddings_in_memory=False)   
      
     # Test 
     test_data = corpus.test
