@@ -672,6 +672,8 @@ if __name__ == "__main__":
 
     tag_type = "mwe"
     fh = "/home/liefe/data/pt/mwe"
+    #fh = "/home/lief/files/data/pt/mwe"
+    
     #cols = {1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 10:"mwe"}
     cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
     
