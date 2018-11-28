@@ -1,0 +1,61 @@
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+2018-11-28 15:24:56.670590: I tensorflow/core/platform/cpu_feature_guard.cc:141] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+2018-11-28 15:24:56.676517: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1411] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.582
+pciBusID: 0000:0e:00.0
+totalMemory: 10.92GiB freeMemory: 9.99GiB
+2018-11-28 15:24:56.676557: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1490] Adding visible gpu devices: 0
+2018-11-28 15:24:57.223243: I tensorflow/core/common_runtime/gpu/gpu_device.cc:971] Device interconnect StreamExecutor with strength 1 edge matrix:
+2018-11-28 15:24:57.223313: I tensorflow/core/common_runtime/gpu/gpu_device.cc:977]      0 
+2018-11-28 15:24:57.223324: I tensorflow/core/common_runtime/gpu/gpu_device.cc:990] 0:   N 
+2018-11-28 15:24:57.223665: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1103] Created TensorFlow device (/job:localhost/replica:0/task:0/device:GPU:0 with 9657 MB memory) -> physical GPU (device: 0, name: GeForce GTX 1080 Ti, pci bus id: 0000:0e:00.0, compute capability: 6.1)
+2018-11-28 15:24:57.224020: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 9.43G (10126334208 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-28 15:24:57.224047: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 8.49G (9113700352 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-28 15:24:57.224061: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 7.64G (8202330112 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-28 15:24:57.224074: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 6.88G (7382096896 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-28 15:24:57.224087: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 6.19G (6643887104 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-28 15:24:57.224099: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 5.57G (5979497984 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-28 15:24:57.224112: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 5.01G (5381548032 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+Traceback (most recent call last):
+  File "/home/lief/tag/sequence_tagger.py", line 707, in <module>
+    tagger = SequenceTagger(corpus, stacked_embeddings, tag_type)
+  File "/home/lief/tag/sequence_tagger.py", line 55, in __init__
+    self.construct(rnn_cell, rnn_dim, optimizer, momentum, dropout, clip_gradient, n_tags, use_crf, restore_model, model_path)
+  File "/home/lief/tag/sequence_tagger.py", line 88, in construct
+    cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/python/util/lazy_loader.py", line 53, in __getattr__
+    module = self._load()
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/python/util/lazy_loader.py", line 42, in _load
+    module = importlib.import_module(self.__name__)
+  File "/home/lief/anaconda3/lib/python3.6/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 994, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 971, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 955, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 665, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 678, in exec_module
+  File "<frozen importlib._bootstrap>", line 219, in _call_with_frames_removed
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/__init__.py", line 40, in <module>
+    from tensorflow.contrib import distribute
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/distribute/__init__.py", line 29, in <module>
+    from tensorflow.contrib.distribute.python.tpu_strategy import TPUStrategy
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/distribute/python/tpu_strategy.py", line 27, in <module>
+    from tensorflow.contrib.tpu.python.ops import tpu_ops
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/tpu/__init__.py", line 65, in <module>
+    from tensorflow.contrib.tpu.python.ops.tpu_ops import *
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/tpu/python/ops/tpu_ops.py", line 39, in <module>
+    resource_loader.get_path_to_datafile("_tpu_ops.so"))
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/util/loader.py", line 56, in load_op_library
+    ret = load_library.load_op_library(path)
+  File "/home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/python/framework/load_library.py", line 56, in load_op_library
+    lib_handle = py_tf.TF_LoadLibrary(library_filename)
+tensorflow.python.framework.errors_impl.NotFoundError: /home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/tpu/python/ops/_tpu_ops.so: failed to map segment from shared object
+======= EPILOG: Wed Nov 28 15:25:04 CET 2018
+== Limits:   mem_free=30G,act_mem_free=30G,h_vmem=30G,gpu=1,gpu_cc_min6.1=1,gpu_ram=11G
+== Usage:    cpu=00:00:21, mem=10.44975 GB s, io=0.17205 GB, vmem=1.072G, maxvmem=1.072G
+== Duration: 00:00:46 (46 s)
+== Server name: dll5
