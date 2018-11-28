@@ -193,6 +193,7 @@ class SequenceTagger:
               epochs=150,
               annealing_factor=.5,
               patience=5,
+              embeddings_in_memory=False,
               checkpoint=False):
         
         # Instantiate scheduler for learning rate annealing
@@ -250,7 +251,7 @@ class SequenceTagger:
                     for j in range(sent_lens[i]):                    
                         token = batch[i][j]
                         
-                        print(len(token.text))
+                        #print(token.text, len(token.text))
                         
                         embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
                         if self.use_pos_tags:
@@ -309,6 +310,8 @@ class SequenceTagger:
                  
                 self.metrics.log_metrics("train", totals, totals_per_tag, epoch, batch_n)                
                 
+                if not embeddings_in_memory:
+                    self.clear_embeddings_in_batch(batch)                
                 
             # Save model if checkpoints enabled
             if checkpoint:
@@ -317,7 +320,7 @@ class SequenceTagger:
            
             # Evaluate with dev data
             dev_data = corpus.dev                
-            dev_score = self.evaluate("dev", dev_data, dev_batch_size, epoch)
+            dev_score = self.evaluate("dev", dev_data, dev_batch_size, epoch, embeddings_in_memory=embeddings_in_memory)
              
             # Perform one step on lr scheduler
             is_reduced = self.scheduler.step(dev_score)
@@ -330,7 +333,7 @@ class SequenceTagger:
                 save_path = self.saver.save(self.session, "{}/best-model.ckpt".format(logdir))
                 print("Best model saved at ", save_path)
                                 
-    def evaluate(self, dataset_name, dataset, eval_batch_size=32, epoch=None, test_mode=False, metric="accuracy"):
+    def evaluate(self, dataset_name, dataset, eval_batch_size=32, epoch=None, test_mode=False, embeddings_in_memory=False, metric="accuracy"):
         
         print("evaluating")
         
@@ -465,7 +468,9 @@ class SequenceTagger:
                         totals_per_tag[tag]['tn'] += 1 # tn?
              
             self.metrics.log_metrics(dataset_name, totals, totals_per_tag, epoch, batch_n)
-             
+            
+            if not embeddings_in_memory:
+                self.clear_embeddings_in_batch(batch)             
                         
         # Write test results
         if test_mode:                
@@ -489,7 +494,11 @@ class SequenceTagger:
         
         else:
             return self.metrics.f1
-      
+    
+    def clear_embeddings_in_batch(self, batch):
+        for sentence in batch:
+            for token in sentence.tokens:
+                token.clear_embeddings()      
 
 class Metrics:
     """Helper class to calculate and store metrics"""
@@ -688,7 +697,7 @@ if __name__ == "__main__":
     
     print("beginning training")
     # Train
-    tagger.train(epochs=150, batch_size=8, dev_batch_size=8, patience=20, checkpoint=True)   
+    tagger.train(epochs=150, batch_size=8, dev_batch_size=8, patience=20, checkpoint=True, embeddings_in_memory=False)   
      
     # Test 
     test_data = corpus.test
