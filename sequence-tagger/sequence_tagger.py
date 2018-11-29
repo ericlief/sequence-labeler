@@ -702,13 +702,13 @@ if __name__ == "__main__":
     
     # Construct the tagger
     print("Constructing tagger")
-    path = "/home/liefe/code/sequence-tagger/sequence-tagger/logs/mwe-150-8-8-20/best-model.ckpt"
+    path = "/home/liefe/tag/logs/mwe-150-16-16-20-pos/best-model.ckpt"
     tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
     #tagger = SequenceTagger(corpus, stacked_embedding, tag_type)
     
     # Train
     print("Beginning training")    
-    tagger.train(epochs=150, batch_size=16, dev_batch_size=16, patience=20, checkpoint=True, embeddings_in_memory=False)   
+    tagger.train(epochs=100, batch_size=32, dev_batch_size=32, patience=20, checkpoint=True, embeddings_in_memory=False)   
      
     # Test 
     test_data = corpus.test
