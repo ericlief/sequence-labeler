@@ -23,6 +23,7 @@ class SequenceTagger:
                  clip_gradient=.25,
                  use_crf=True,
                  use_pos_tags=False,
+                 use_lemmas=False,
                  threads=1, 
                  seed=42,
                  restore_model=False,
@@ -34,15 +35,18 @@ class SequenceTagger:
         self.tag_type = tag_type # what we're predicting
         self.metrics = Metrics() # for logging metrics
         self.use_pos_tags = use_pos_tags # train with pos tags
+        self.use_lemmas = use_lemmas # train with lemmas
         
         # Make the tag dictionary from the corpus
         self.tag_dict = corpus.make_tag_dictionary(tag_type=tag_type)  # id to tag
         n_tags = len(self.tag_dict)
         
-        # Make dictionary for pos tags
+        # Make dictionary for pos tags and lemmas if desired
         if use_pos_tags:
             self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag
-                
+        if use_lemmas:
+            self.lemma_dict = corpus.make_tag_dictionary("lemma")  # id to tag
+                     
         #print(tag_type, self.tag_dict.idx2item)
         #print(corpus.train)
         
@@ -60,7 +64,6 @@ class SequenceTagger:
 
             # Shape = (batch_size, max_sent_len, embedding_dim)
             self.embedded_sents = tf.placeholder(tf.float32, [None, None, self.embedding_dim], name="embedded_sents")
-
             # Shape = (batch_size, max_sent_len)
             self.gold_tags = tf.placeholder(tf.int32, [None, None], name="tags")            
             # Trainable params or not
@@ -75,7 +78,15 @@ class SequenceTagger:
                 pos_tag_embedding = tf.get_variable("tag_embedding", [n_pos_tags, rnn_dim], tf.float32)
                 embedded_pos_tags = tf.nn.embedding_lookup(pos_tag_embedding, self.pos_tags)
                 embedded_sents = tf.concat([self.embedded_sents, embedded_pos_tags], axis=2)
-                
+            
+            if self.use_lemmas:
+                # Shape = (batch_size, max_sent_len)                
+                self.lemmas = tf.placeholder(tf.int32, [None, None], name="lemmas")
+                n_lemmas = len(self.lemma_dict)
+                lemma_embedding = tf.get_variable("lemma_embedding", [n_lemmas, rnn_dim], tf.float32)
+                embedded_lemmas = tf.nn.embedding_lookup(pos_tag_embedding, self.pos_tags)
+                embedded_sents = tf.concat([self.embedded_sents, embedded_lemmas], axis=2)
+                    
             # Default learning rate
             self.lr = .1
             
@@ -252,6 +263,8 @@ class SequenceTagger:
                 
                 if self.use_pos_tags:
                     pos_tags = np.zeros([n_sents, max_sent_len]) 
+                if self.use_lemmas:
+                    lemmas = np.zeros([n_sents, max_sent_len]) 
                 
                 for i in range(n_sents):
                     for j in range(sent_lens[i]):                    
@@ -262,6 +275,8 @@ class SequenceTagger:
                         embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
                         if self.use_pos_tags:
                             pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
+                        if self.use_lemmas:
+                            lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                            
                         gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
                         
                         # Uncomment for time major
@@ -270,19 +285,33 @@ class SequenceTagger:
 
                 #print("running graph")
                 # Run graph for batch
+                
+                feed_dict = {self.sentence_lens: sent_lens,
+                             self.embedded_sents: embedded_sents,
+                             self.gold_tags: gold_tags, 
+                             self.is_training: True}                              
+                
                 if self.use_pos_tags:
-                    _, _, loss, predicted_tag_ids = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
-                                     {self.sentence_lens: sent_lens,
-                                      self.embedded_sents: embedded_sents,
-                                      self.pos_tags: pos_tags,
-                                      self.gold_tags: gold_tags, 
-                                      self.is_training: True})
-                else:
-                    _, _, loss, predicted_tag_ids = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
-                                     {self.sentence_lens: sent_lens,
-                                      self.embedded_sents: embedded_sents,
-                                      self.gold_tags: gold_tags, 
-                                      self.is_training: True})
+                    feed_dict[self.pos_tags] = pos_tags
+                    
+                    #feed_dict = {self.sentence_lens: sent_lens,
+                                 #self.embedded_sents: embedded_sents,
+                                 #self.gold_tags: gold_tags, 
+                                 #self.is_training: True})                    
+                    
+                if self.use_lemmas:
+                    feed_dict[self.lemmas] = lemmas
+       
+                    
+                #_, _, loss, predicted_tag_ids = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
+                                 #{self.sentence_lens: sent_lens,
+                                  #self.embedded_sents: embedded_sents,
+                                  #self.pos_tags: pos_tags,
+                                  #self.gold_tags: gold_tags, 
+                                  #self.is_training: True})
+           
+                _, _, loss, predicted_tag_ids = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
+                                 feed_dict)
                     
                 #print("annotating tags")
                 # DEBUG: Add predicted tag to each token (annotate)    
@@ -378,57 +407,66 @@ class SequenceTagger:
             
             if self.use_pos_tags:
                 pos_tags = np.zeros([n_sents, max_sent_len]) 
-            
+            if self.use_lemmas:
+                lemmas = np.zeros([n_sents, max_sent_len]) 
+                 
             for i in range(n_sents):
                 for j in range(sent_lens[i]):                    
                     token = batch[i][j] 
                     embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
                     if self.use_pos_tags:
                         pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
+                    if self.use_lemmas:
+                        lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                          
                     gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
                     
                     # Uncomment for time major
                     #embedded_sents[j, i] = token.embedding.numpy() # convert torch tensor to numpy array
                     #gold_tags[j, i] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)  
             
+            
+            
+            feed_dict = {self.sentence_lens: sent_lens,
+                         self.embedded_sents: embedded_sents,
+                         self.is_training: False}                              
+            
+            if self.use_pos_tags:
+                feed_dict[self.pos_tags] = pos_tags                              
+            if self.use_lemmas:
+                feed_dict[self.lemmas] = lemmas
+   
             # For dev data
-            if not test_mode:    
-                if self.use_pos_tags:
-                    _, _, dev_loss, predicted_tag_ids =  self.session.run([self.update_accuracy, 
-                                                              self.update_loss, 
-                                                              self.current_loss, 
-                                                              self.predictions],
-                                                             {self.sentence_lens: sent_lens,
-                                                              self.embedded_sents: embedded_sents,
-                                                              self.pos_tags: pos_tags,
-                                                              self.gold_tags: gold_tags, 
-                                                              self.is_training: False})   
-                else:
-                    _, _, dev_loss, predicted_tag_ids =  self.session.run([self.update_accuracy, 
-                                                              self.update_loss, 
-                                                              self.current_loss, 
-                                                              self.predictions],
-                                                             {self.sentence_lens: sent_lens,
-                                                              self.embedded_sents: embedded_sents,
-                                                              self.gold_tags: gold_tags, 
-                                                              self.is_training: False})                     
+            if not test_mode:
+                feed_dict[self.gold_tags] = gold_tags
+                _, _, dev_loss, predicted_tag_ids =  self.session.run([self.update_accuracy, 
+                                                                       self.update_loss, 
+                                                                       self.current_loss, 
+                                                                       self.predictions],
+                                                                      feed_dict)   
+            
+            #else:
+                #_, _, dev_loss, predicted_tag_ids =  self.session.run([self.update_accuracy, 
+                                                              #self.update_loss, 
+                                                              #self.current_loss, 
+                                                              #self.predictions],
+                                                             #{self.sentence_lens: sent_lens,
+                                                              #self.embedded_sents: embedded_sents,
+                                                              #self.gold_tags: gold_tags, 
+                                                              #self.is_training: False})                     
                
                
                 print("dev loss ", dev_loss)
             
             # For test data
             else:
-                if self.use_pos_tags:
-                    predicted_tag_ids = self.session.run(self.predictions,
-                                                     {self.sentence_lens: sent_lens,
-                                                      self.embedded_sents: embedded_sents,
-                                                      self.pos_tags: pos_tags,
-                                                      self.is_training: False})                
-                else:
-                    predicted_tag_ids = self.session.run(self.predictions,
-                                                         {self.sentence_lens: sent_lens,
-                                                          self.embedded_sents: embedded_sents,
-                                                          self.is_training: False})                      
+                #if self.use_pos_tags:
+                predicted_tag_ids = self.session.run(self.predictions,
+                                                     feed_dict)                
+                #else:
+                    #predicted_tag_ids = self.session.run(self.predictions,
+                                                         #{self.sentence_lens: sent_lens,
+                                                          #self.embedded_sents: embedded_sents,
+                                                          #self.is_training: False})                      
                 
             # Add predicted tag to each token (annotate)    
             for i in range(n_sents):
@@ -702,13 +740,13 @@ if __name__ == "__main__":
     
     # Construct the tagger
     print("Constructing tagger")
-    path = "/home/liefe/tag/logs/mwe-150-16-16-20-pos/best-model.ckpt"
-    tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
-    #tagger = SequenceTagger(corpus, stacked_embedding, tag_type)
+    #path = "/home/liefe/tag/logs/mwe-150-16-16-20-pos/best-model.ckpt"
+    #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
+    tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, use_lemmas=True, use_pos_tags=True)
     
     # Train
     print("Beginning training")    
-    tagger.train(epochs=100, batch_size=32, dev_batch_size=32, patience=20, checkpoint=True, embeddings_in_memory=False)   
+    tagger.train(epochs=150, batch_size=32, dev_batch_size=32, patience=20, checkpoint=True, embeddings_in_memory=False)   
      
     # Test 
     test_data = corpus.test
