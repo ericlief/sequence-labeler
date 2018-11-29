@@ -1,0 +1,30 @@
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+2018-11-29 22:47:07.016758: I tensorflow/core/platform/cpu_feature_guard.cc:141] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+2018-11-29 22:47:07.026400: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1411] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.582
+pciBusID: 0000:0e:00.0
+totalMemory: 10.92GiB freeMemory: 9.99GiB
+2018-11-29 22:47:07.026444: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1490] Adding visible gpu devices: 0
+2018-11-29 22:47:07.732341: I tensorflow/core/common_runtime/gpu/gpu_device.cc:971] Device interconnect StreamExecutor with strength 1 edge matrix:
+2018-11-29 22:47:07.732419: I tensorflow/core/common_runtime/gpu/gpu_device.cc:977]      0 
+2018-11-29 22:47:07.732443: I tensorflow/core/common_runtime/gpu/gpu_device.cc:990] 0:   N 
+2018-11-29 22:47:07.732882: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1103] Created TensorFlow device (/job:localhost/replica:0/task:0/device:GPU:0 with 9657 MB memory) -> physical GPU (device: 0, name: GeForce GTX 1080 Ti, pci bus id: 0000:0e:00.0, compute capability: 6.1)
+2018-11-29 22:47:07.733397: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 9.43G (10126334208 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-29 22:47:07.733449: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 8.49G (9113700352 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-29 22:47:07.733484: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 7.64G (8202330112 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-29 22:47:07.733514: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 6.88G (7382096896 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-29 22:47:07.733544: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 6.19G (6643887104 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-29 22:47:07.733575: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 5.57G (5979497984 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+2018-11-29 22:47:07.733603: E tensorflow/stream_executor/cuda/cuda_driver.cc:806] failed to allocate 5.01G (5381548032 bytes) from device: CUDA_ERROR_OUT_OF_MEMORY: out of memory
+terminate called after throwing an instance of 'std::system_error'
+  what():  Resource temporarily unavailable
+./run-tagger.sh: line 4: 24277 Aborted                 (core dumped) python3 /home/lief/tag/sequence_tagger.py
+======= EPILOG: Thu Nov 29 22:48:11 CET 2018
+== Limits:   mem_free=30G,act_mem_free=30G,h_vmem=30G,gpu=1,gpu_cc_min6.1=1,gpu_ram=11G
+== Usage:    cpu=00:00:47, mem=122.27678 GB s, io=8.97372 GB, vmem=6.883G, maxvmem=6.883G
+== Duration: 00:01:46 (106 s)
+== Server name: dll4

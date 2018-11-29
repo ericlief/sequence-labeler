@@ -1,0 +1,48 @@
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+LRC:ubuntu 18.04: SGE 8.1.9 configured...
+2018-11-29 22:16:48.505669: I tensorflow/core/platform/cpu_feature_guard.cc:141] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+2018-11-29 22:16:49.164687: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1411] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.582
+pciBusID: 0000:0d:00.0
+totalMemory: 10.92GiB freeMemory: 10.76GiB
+2018-11-29 22:16:49.165050: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1490] Adding visible gpu devices: 0
+2018-11-29 22:16:49.653127: I tensorflow/core/common_runtime/gpu/gpu_device.cc:971] Device interconnect StreamExecutor with strength 1 edge matrix:
+2018-11-29 22:16:49.653210: I tensorflow/core/common_runtime/gpu/gpu_device.cc:977]      0 
+2018-11-29 22:16:49.653223: I tensorflow/core/common_runtime/gpu/gpu_device.cc:990] 0:   N 
+2018-11-29 22:16:49.653571: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1103] Created TensorFlow device (/job:localhost/replica:0/task:0/device:GPU:0 with 10405 MB memory) -> physical GPU (device: 0, name: GeForce GTX 1080 Ti, pci bus id: 0000:0d:00.0, compute capability: 6.1)
+WARNING:tensorflow:From /home/lief/tag/mnist_layers_activations.py:116: read_data_sets (from tensorflow.contrib.learn.python.learn.datasets.mnist) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use alternatives such as official/mnist/dataset.py from tensorflow/models.
+WARNING:tensorflow:From /home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/learn/python/learn/datasets/mnist.py:260: maybe_download (from tensorflow.contrib.learn.python.learn.datasets.base) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please write your own downloading logic.
+WARNING:tensorflow:From /home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/learn/python/learn/datasets/mnist.py:262: extract_images (from tensorflow.contrib.learn.python.learn.datasets.mnist) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use tf.data to implement this functionality.
+WARNING:tensorflow:From /home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/learn/python/learn/datasets/mnist.py:267: extract_labels (from tensorflow.contrib.learn.python.learn.datasets.mnist) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use tf.data to implement this functionality.
+WARNING:tensorflow:From /home/lief/anaconda3/lib/python3.6/site-packages/tensorflow/contrib/learn/python/learn/datasets/mnist.py:290: DataSet.__init__ (from tensorflow.contrib.learn.python.learn.datasets.mnist) is deprecated and will be removed in a future version.
+Instructions for updating:
+Please use alternatives such as official/mnist/dataset.py from tensorflow/models.
+2018-11-29 22:17:07.391026: I tensorflow/core/platform/cpu_feature_guard.cc:141] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2 FMA
+2018-11-29 22:17:08.148500: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1411] Found device 0 with properties: 
+name: GeForce GTX 1080 Ti major: 6 minor: 1 memoryClockRate(GHz): 1.582
+pciBusID: 0000:0d:00.0
+totalMemory: 10.92GiB freeMemory: 10.76GiB
+2018-11-29 22:17:08.148554: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1490] Adding visible gpu devices: 0
+2018-11-29 22:17:08.660923: I tensorflow/core/common_runtime/gpu/gpu_device.cc:971] Device interconnect StreamExecutor with strength 1 edge matrix:
+2018-11-29 22:17:08.660988: I tensorflow/core/common_runtime/gpu/gpu_device.cc:977]      0 
+2018-11-29 22:17:08.661000: I tensorflow/core/common_runtime/gpu/gpu_device.cc:990] 0:   N 
+2018-11-29 22:17:08.664534: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1103] Created TensorFlow device (/job:localhost/replica:0/task:0/device:GPU:0 with 10405 MB memory) -> physical GPU (device: 0, name: GeForce GTX 1080 Ti, pci bus id: 0000:0d:00.0, compute capability: 6.1)
+terminate called after throwing an instance of 'std::system_error'
+  what():  Resource temporarily unavailable
+./run.sh: line 5:  5425 Aborted                 (core dumped) python /home/lief/tag/mnist_layers_activations.py
+======= EPILOG: Thu Nov 29 22:17:19 CET 2018
+== Limits:   mem_free=30G,act_mem_free=30G,h_vmem=30G,gpu=1,gpu_cc_min6.1=1,gpu_ram=11G
+== Usage:    cpu=00:00:18, mem=2.92453 GB s, io=0.18935 GB, vmem=280.930M, maxvmem=1.041G
+== Duration: 00:00:39 (39 s)
+== Server name: dll4
