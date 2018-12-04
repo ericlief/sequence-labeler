@@ -746,7 +746,7 @@ if __name__ == "__main__":
     
     # Train
     print("Beginning training")    
-    tagger.train(epochs=150, batch_size=32, dev_batch_size=32, patience=20, checkpoint=True, embeddings_in_memory=False)   
+    tagger.train(epochs=150, batch_size=32, dev_batch_size=32, patience=5, checkpoint=True, embeddings_in_memory=False)   
      
     # Test 
     test_data = corpus.test
