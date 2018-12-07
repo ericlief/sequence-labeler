@@ -19,7 +19,9 @@ class SequenceTagger:
                  rnn_dim=256,
                  optimizer="SGD", 
                  momentum=False,
-                 dropout=.5,
+                 dropout=.0,
+                 locked_dropout=.5,
+                 word_dropout=.0,
                  clip_gradient=.25,
                  use_crf=True,
                  use_pos_tags=False,
@@ -41,6 +43,9 @@ class SequenceTagger:
         self.tag_dict = corpus.make_tag_dictionary(tag_type=tag_type)  # id to tag
         n_tags = len(self.tag_dict)
         
+        print(self.tag_dict.idx2item, n_tags)
+        print(corpus.train[0][0].text)
+        
         # Make dictionary for pos tags and lemmas if desired
         if use_pos_tags:
             self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag
@@ -56,9 +61,9 @@ class SequenceTagger:
         self.session = tf.Session(graph = graph, config=tf.ConfigProto(log_device_placement=False))
         
         # Construct graph
-        self.construct(rnn_cell, rnn_dim, optimizer, momentum, dropout, clip_gradient, n_tags, use_crf, restore_model, model_path)
+        self.construct(rnn_cell, rnn_dim, optimizer, momentum, dropout, locked_dropout, word_dropout, clip_gradient, n_tags, use_crf, restore_model, model_path)
         
-    def construct(self, rnn_cell, rnn_dim, optimizer, momentum, dropout, clip_gradient, n_tags, use_crf, restore_model, model_path):
+    def construct(self, rnn_cell, rnn_dim, optimizer, momentum, dropout, locked_dropout, word_dropout, clip_gradient, n_tags, use_crf, restore_model, model_path):
         
         with self.session.graph.as_default():
 
@@ -77,7 +82,7 @@ class SequenceTagger:
                 n_pos_tags = len(self.pos_tag_dict)
                 pos_tag_embedding = tf.get_variable("tag_embedding", [n_pos_tags, rnn_dim], tf.float32)
                 embedded_pos_tags = tf.nn.embedding_lookup(pos_tag_embedding, self.pos_tags)
-                embedded_sents = tf.concat([self.embedded_sents, embedded_pos_tags], axis=2)
+                self.embedded_sents = tf.concat([self.embedded_sents, embedded_pos_tags], axis=2)
             
             if self.use_lemmas:
                 # Shape = (batch_size, max_sent_len)                
@@ -85,7 +90,16 @@ class SequenceTagger:
                 n_lemmas = len(self.lemma_dict)
                 lemma_embedding = tf.get_variable("lemma_embedding", [n_lemmas, rnn_dim], tf.float32)
                 embedded_lemmas = tf.nn.embedding_lookup(pos_tag_embedding, self.pos_tags)
-                embedded_sents = tf.concat([self.embedded_sents, embedded_lemmas], axis=2)
+                self.embedded_sents = tf.concat([self.embedded_sents, embedded_lemmas], axis=2)
+            
+            # Normal dropout
+            if dropout:
+                self.embedded_sents = tf.nn.dropout(self.embedded_sents, 1-dropout)
+            
+            # Apply word dropout
+            if word_dropout:
+                self.embedded_sents = self.word_dropout(self.embedded_sents, word_dropout)
+            
                     
             # Default learning rate
             self.lr = .1
@@ -102,9 +116,9 @@ class SequenceTagger:
             else: 
                 raise Exception("Must select an rnn cell type")     
 
-            # Add dropout
-            cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-dropout, output_keep_prob=1-dropout)
-            cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-dropout, output_keep_prob=1-dropout)
+            # Add locked/variational dropout wrapper
+            cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
+            cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
 
             # Process embedded inputs with rnn cell
             outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, 
@@ -114,6 +128,9 @@ class SequenceTagger:
                                                          dtype=tf.float32,
                                                          time_major=False)
 
+            if dropout:
+                outputs = tf.nn.dropout(outputs, 1-dropout)
+                
             # Concatenate the outputs for fwd and bwd directions (in the third dimension).
             out_concat = tf.concat(outputs, axis=-1)
 
@@ -544,6 +561,17 @@ class SequenceTagger:
             for token in sentence.tokens:
                 token.clear_embeddings()      
 
+
+    def word_dropout(self, x, dropout_rate):
+        mask = tf.distributions.Bernoulli(1 - dropout_rate, 
+                                          dtype=tf.float32).sample([tf.shape(x)[0], tf.shape(x)[1], 1])                                        
+        
+        #print(sess.run(mask))
+        
+        return mask * x        
+
+
+                
 class Metrics:
     """Helper class to calculate and store metrics"""
     
@@ -698,9 +726,14 @@ if __name__ == "__main__":
     
     # Get the corpus
     
-    #fh = "/home/liefe/data/pt/UD_Portuguese-Bosque"  # pos
-    #cols = {1:"text", 2:"lemma", 3:"pos"}
-    #tag_type = "pos"
+    #tag_type = "pos"                                                                                                                        
+    #fh = "/home/liefe/data/pt/UD_Portuguese-Bosque"  # pos                                                                                  
+    #cols = {1:"text", 2:"lemma", 3:"pos"}                                                                                                   
+ 
+    tag_type = "pos"
+    fh = "/home/liefe/data/pt/pos/macmorpho"
+    cols = {0:"text", 1:"pos"}
+    
     
     #fh = "/home/liefe/data/pt/ner/harem" # ner
     ##fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
@@ -708,12 +741,11 @@ if __name__ == "__main__":
     #tag_type = "ne"    
 
 
-    tag_type = "mwe"
-    fh = "/home/liefe/data/pt/mwe"
-    #fh = "/home/lief/files/data/pt/mwe"
-    
+    #tag_type = "mwe"
+    #fh = "/home/liefe/data/pt/mwe"
+    #fh = "/home/lief/files/data/pt/mwe" 
     #cols = {1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 10:"mwe"}
-    cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
+    #cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
     
     # Fetch corpus
     print("Getting corpus")
@@ -729,8 +761,8 @@ if __name__ == "__main__":
     #word_embedding = WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv")
     
     # Load Character Language Models (clms)
-    clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache")  
-    clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache")    
+    clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")  
+    clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")    
     #clm_fw = CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt")
     #clm_bw = CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt")
     
@@ -742,11 +774,11 @@ if __name__ == "__main__":
     print("Constructing tagger")
     #path = "/home/liefe/tag/logs/mwe-150-16-16-20-pos/best-model.ckpt"
     #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
-    tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, use_lemmas=True, use_pos_tags=True)
+    tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, dropout=0, locked_dropout=.5, word_dropout=.05, use_lemmas=False, use_pos_tags=False)
     
     # Train
     print("Beginning training")    
-    tagger.train(epochs=150, batch_size=32, dev_batch_size=32, patience=5, checkpoint=True, embeddings_in_memory=False)   
+    tagger.train(epochs=50, batch_size=32, dev_batch_size=32, patience=5, checkpoint=True, embeddings_in_memory=False)   
      
     # Test 
     test_data = corpus.test
