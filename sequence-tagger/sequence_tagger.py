@@ -7,29 +7,59 @@ import random
 import torch
 from torch._six import inf
 from collections import defaultdict
+from flair.data import Dictionary
 
 
 class SequenceTagger:
 
+    #def __init__(self, 
+                 #args,
+                 #corpus,
+                 #embedding,
+                 #tag_type,
+                 #rnn_cell=args.rnn_cell,    
+                 #rnn_dim=args.rnn_dim,
+                 #optimizer=args.optimizer, 
+                 #momentum=args.momentum,
+                 #dropout=args.dropout,
+                 #locked_dropout=args.locked_dropout,
+                 #word_dropout=args.word_dropout,
+                 #clip_gradient=args.clip_gradient,
+                 #use_crf=args.use_crf,
+                 #use_pos_tags=args.use_pos_tags,
+                 #use_lemmas=args.use_lemmas,
+                 #use_cle=args.use_cle,
+                 #cle_dim=args.cle_dim,
+                 #cnne_max=args.cnne_max,
+                 #seed=42,
+                 #restore_model=False,
+                 #model_path=None,
+                 #char_dict_path=None):                  
     def __init__(self, 
+                 args,
                  corpus,
                  embedding,
                  tag_type,
-                 rnn_cell="LSTM",    
-                 rnn_dim=256,
-                 optimizer="SGD", 
-                 momentum=False,
-                 dropout=.0,
-                 locked_dropout=.5,
-                 word_dropout=.0,
-                 clip_gradient=.25,
-                 use_crf=True,
-                 use_pos_tags=False,
-                 use_lemmas=False,
-                 threads=1, 
                  seed=42,
                  restore_model=False,
-                 model_path=None):                  
+                 model_path=None,
+                 char_dict_path=None):  
+        
+        rnn_cell=args.rnn_cell    
+        rnn_dim=args.rnn_dim
+        optimizer=args.optimizer 
+        momentum=args.momentum
+        dropout=args.dropout
+        locked_dropout=args.locked_dropout
+        word_dropout=args.word_dropout
+        clip_gradient=args.clip_gradient
+        use_crf=args.use_crf
+        use_pos_tags=args.use_pos_tags
+        use_lemmas=args.use_lemmas
+        use_cle=args.use_cle
+        cle_dim=args.cle_dim
+        cnne_max=args.cnne_max
+        seed=42
         
         self.corpus = corpus # flair corpus type: List of Sentences  
         self.embedding = embedding # flair LM embedding or stacked type
@@ -38,12 +68,14 @@ class SequenceTagger:
         self.metrics = Metrics() # for logging metrics
         self.use_pos_tags = use_pos_tags # train with pos tags
         self.use_lemmas = use_lemmas # train with lemmas
+        self.use_cle = use_cle # train character-level embeddings
         
         # Make the tag dictionary from the corpus
         self.tag_dict = corpus.make_tag_dictionary(tag_type=tag_type)  # id to tag
         n_tags = len(self.tag_dict)
         
-        print(self.tag_dict.idx2item, n_tags)
+        print('tag dict', self.tag_dict.idx2item)
+        print(n_tags)
         print(corpus.train[0][0].text)
         
         # Make dictionary for pos tags and lemmas if desired
@@ -61,14 +93,18 @@ class SequenceTagger:
         self.session = tf.Session(graph = graph, config=tf.ConfigProto(log_device_placement=False))
         
         # Construct graph
-        self.construct(rnn_cell, rnn_dim, optimizer, momentum, dropout, locked_dropout, word_dropout, clip_gradient, n_tags, use_crf, restore_model, model_path)
+        self.construct(rnn_cell, rnn_dim, optimizer, momentum, dropout, locked_dropout, word_dropout, clip_gradient, n_tags, use_crf, restore_model, model_path, char_dict_path, cle_dim, cnne_max)
         
-    def construct(self, rnn_cell, rnn_dim, optimizer, momentum, dropout, locked_dropout, word_dropout, clip_gradient, n_tags, use_crf, restore_model, model_path):
+    def construct(self, rnn_cell, rnn_dim, optimizer, momentum, dropout, locked_dropout, word_dropout, clip_gradient, n_tags, use_crf, restore_model, model_path, char_dict_path, cle_dim, cnne_max):
         
         with self.session.graph.as_default():
 
             # Shape = (batch_size, max_sent_len, embedding_dim)
             self.embedded_sents = tf.placeholder(tf.float32, [None, None, self.embedding_dim], name="embedded_sents")
+            # Shape = (batch_size, max_sent_len)
+            self.char_seq_ids = tf.placeholder(tf.int32, [None, None], name="char_seq_ids")
+            # Shape = (num_char_seqs, indef]
+            self.char_seqs = tf.placeholder(tf.int32, [None, None], name="char_seqs")
             # Shape = (batch_size, max_sent_len)
             self.gold_tags = tf.placeholder(tf.int32, [None, None], name="tags")            
             # Trainable params or not
@@ -82,27 +118,86 @@ class SequenceTagger:
                 n_pos_tags = len(self.pos_tag_dict)
                 pos_tag_embedding = tf.get_variable("tag_embedding", [n_pos_tags, rnn_dim], tf.float32)
                 embedded_pos_tags = tf.nn.embedding_lookup(pos_tag_embedding, self.pos_tags)
-                self.embedded_sents = tf.concat([self.embedded_sents, embedded_pos_tags], axis=2)
+                #self.embedded_sents = tf.concat([self.embedded_sents, embedded_pos_tags], axis=2)
+                inputs = tf.concat([self.embedded_sents, embedded_pos_tags], axis=2)
             
             if self.use_lemmas:
                 # Shape = (batch_size, max_sent_len)                
                 self.lemmas = tf.placeholder(tf.int32, [None, None], name="lemmas")
                 n_lemmas = len(self.lemma_dict)
                 lemma_embedding = tf.get_variable("lemma_embedding", [n_lemmas, rnn_dim], tf.float32)
-                embedded_lemmas = tf.nn.embedding_lookup(pos_tag_embedding, self.pos_tags)
-                self.embedded_sents = tf.concat([self.embedded_sents, embedded_lemmas], axis=2)
+                embedded_lemmas = tf.nn.embedding_lookup(lemma_embedding, self.lemmas)
+                inputs = tf.concat([self.embedded_sents, embedded_lemmas], axis=2)
+            
+            
+            if self.use_cle:
+                
+                # Build char dictionary
+                if char_dict_path is None:
+                    self.char_dict = Dictionary.load('common-chars')
+                else:
+                    self.char_dict = Dictionary.load_from_file(cle_path)    
+                num_chars = len(self.char_dict.idx2item)
+              
+     
+                # Generate character embeddings for num_chars of dimensionality cle_dim.
+                char_embeddings = tf.get_variable('char_embeddings', [num_chars, cle_dim])
+                
+                # Embed self.chaseqs (list of unique words in the batch) using the character embeddings.
+                embedded_chars = tf.nn.embedding_lookup(char_embeddings, self.char_seqs)
+                # For kernel sizes of {2..args.cnne_max}, do the following:
+                # - use `tf.layers.conv1d` on input embedded characters, with given kernel size
+                #   and `args.cnne_filters`; use `VALID` padding, stride 1 and no activation.
+                # - perform channel-wise max-pooling over the whole word, generating output
+                #   of size `args.cnne_filters` for every word.
+                features = []
+                for kernel_size in range(2, args.cnne_max + 1):
+                    conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                    # Apply batch norm
+                    if args.bn:
+                        conv = tf.layers.batch_normalization(conv, training=self.is_training, name='cnn_layer_BN_'+str(kernel_size))
+                    pooling = tf.reduce_max(conv, axis=1)
+                    features.append(pooling)
+           
+                # Concatenate the computed features (in the order of kernel sizes 2..args.cnne_max).
+                # Consequently, each word from `self.charseqs` is represented using convolutional embedding
+                # (CNNE) of size `(args.cnne_max-1)*args.cnne_filters`.                
+                features_concat = tf.concat(features, axis=1)
+                # Generate CNNEs of all words in the batch by indexing the just computed embeddings
+                # by self.charseq_ids (using tf.nn.embedding_lookup).
+                cnne = tf.nn.embedding_lookup(features_concat, self.char_seq_ids)
+                # Concatenate the word embeddings (computed above) and the CNNE (in this order).
+                inputs = tf.concat([self.embedded_sents, cnne], axis=2)
+                
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             
             # Normal dropout
             if dropout:
-                self.embedded_sents = tf.nn.dropout(self.embedded_sents, 1-dropout)
+                inputs = tf.nn.dropout(inputs, 1-dropout)
             
             # Apply word dropout
             if word_dropout:
-                self.embedded_sents = self.word_dropout(self.embedded_sents, word_dropout)
+                inputs = self.word_dropout(inputs, word_dropout)
             
                     
             # Default learning rate
-            self.lr = .1
+            self.lr = args.lr
             
             # Choose RNN cell according to args.rnn_cell (LSTM and GRU)
             if rnn_cell == 'GRU':
@@ -123,7 +218,7 @@ class SequenceTagger:
             # Process embedded inputs with rnn cell
             outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, 
                                                          cell_bw=cell_bw, 
-                                                         inputs=self.embedded_sents, 
+                                                         inputs=inputs, 
                                                          sequence_length=self.sentence_lens, 
                                                          dtype=tf.float32,
                                                          time_major=False)
@@ -220,15 +315,28 @@ class SequenceTagger:
                 tf.contrib.summary.initialize(session=self.session, graph=self.session.graph)
 
 
+    #def train(self, 
+              #lr=args.lr,
+              #final_lr=args.final_lr,
+              #batch_size=args.batch_size,
+              #dev_batch_size=args.dev_batch_size,
+              #epochs=args.epochs,
+              #annealing_factor=args.annealing_factor,
+              #patience=args.patience,
+              #embeddings_in_memory=False,
+              #checkpoint=False):
     def train(self, 
-              lr=.1,
-              batch_size=32,
-              dev_batch_size=16,
-              epochs=150,
-              annealing_factor=.5,
-              patience=5,
+              args,
               embeddings_in_memory=False,
-              checkpoint=False):
+              checkpoint=False): 
+        
+        lr=args.lr
+        final_lr=args.final_lr
+        batch_size=args.batch_size
+        dev_batch_size=args.dev_batch_size
+        epochs=args.epochs
+        annealing_factor=args.annealing_factor
+        patience=args.patience
         
         # Instantiate scheduler for learning rate annealing
         self.scheduler = ReduceLROnPlateau(lr, annealing_factor, patience)
@@ -241,7 +349,7 @@ class SequenceTagger:
         for epoch in range(epochs):
             
             # Stop if lr gets to small
-            if self.lr < .001:
+            if self.lr < final_lr:
                 print("Learning rate has become to small. Exiting training: lr=", tagger.lr)
                 break    
             
@@ -282,19 +390,38 @@ class SequenceTagger:
                     pos_tags = np.zeros([n_sents, max_sent_len]) 
                 if self.use_lemmas:
                     lemmas = np.zeros([n_sents, max_sent_len]) 
-                
+                if self.use_cle:
+                    char_seq_map = {'<pad>': 0}
+                    char_seqs = [[0]]
+                    char_seq_ids = []                      
                 for i in range(n_sents):
+                    ids = np.zeros([max_sent_len])
                     for j in range(sent_lens[i]):                    
                         token = batch[i][j]
                         
                         #print(token.text, len(token.text))
+                        
+                        #embedding = [token._embeddings[emb] for emb in sorted(token._embeddings.keys()) if emb.static_embeddings]
                         
                         embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
                         if self.use_pos_tags:
                             pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
                         if self.use_lemmas:
                             lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                            
+                        
+                        if self.use_cle:
+                            if token.text not in char_seq_map:
+                                char_seq = [self.char_dict.get_idx_for_item(c) for c in token.text]
+                                char_seq_map[token.text] = len(char_seqs)
+                                char_seqs.append(char_seq)
+                                
+                            ids[j] = char_seq_map[token.text]                            
+                        
                         gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
+                     
+                    # Append sentence char_seq_ids
+                    if self.use_cle:
+                        char_seq_ids.append(ids)
                         
                         # Uncomment for time major
                         #embedded_sents[j, i] = token.embedding.numpy() # convert torch tensor to numpy array
@@ -308,17 +435,27 @@ class SequenceTagger:
                              self.gold_tags: gold_tags, 
                              self.is_training: True}                              
                 
+                if self.use_cle:
+                    # Pad char sequences
+                    char_seqs.sort(key=lambda i: len(i), reverse=True)
+                    max_char_seq = len(char_seqs[0])
+                    n = len(char_seqs)
+                    batch_char_seqs = np.zeros([n, max_char_seq])
+                    for i in range(n):
+                        batch_char_seqs[i, 0:len(char_seqs[i])] = char_seqs[i]
+                    
+                    feed_dict[self.char_seqs] = batch_char_seqs
+                    feed_dict[self.char_seq_ids] = char_seq_ids
+                    
                 if self.use_pos_tags:
                     feed_dict[self.pos_tags] = pos_tags
-                    
-                    #feed_dict = {self.sentence_lens: sent_lens,
-                                 #self.embedded_sents: embedded_sents,
-                                 #self.gold_tags: gold_tags, 
-                                 #self.is_training: True})                    
-                    
+                                          
                 if self.use_lemmas:
                     feed_dict[self.lemmas] = lemmas
        
+                
+
+                    
                     
                 #_, _, loss, predicted_tag_ids = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
                                  #{self.sentence_lens: sent_lens,
@@ -376,6 +513,7 @@ class SequenceTagger:
              
             # Perform one step on lr scheduler
             is_reduced = self.scheduler.step(dev_score)
+            # LR has been reduced on scheduler, update global 
             if is_reduced:
                 self.lr = self.scheduler.lr
             print("Epoch {} batch {}: train loss \t{}\t lr \t{}\t dev score \t{}\t bad epochs \t{}".format(epoch, batch_n, loss, self.lr, dev_score, self.scheduler.bad_epochs))        
@@ -422,31 +560,78 @@ class SequenceTagger:
             embedded_sents = np.zeros([n_sents, max_sent_len, self.embedding_dim])
             gold_tags = np.zeros([n_sents, max_sent_len]) 
             
-            if self.use_pos_tags:
-                pos_tags = np.zeros([n_sents, max_sent_len]) 
-            if self.use_lemmas:
-                lemmas = np.zeros([n_sents, max_sent_len]) 
+            #if self.use_pos_tags:
+                #pos_tags = np.zeros([n_sents, max_sent_len]) 
+            #if self.use_lemmas:
+                #lemmas = np.zeros([n_sents, max_sent_len]) 
                  
-            for i in range(n_sents):
-                for j in range(sent_lens[i]):                    
-                    token = batch[i][j] 
-                    embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
-                    if self.use_pos_tags:
-                        pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
-                    if self.use_lemmas:
-                        lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                          
-                    gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
+            #for i in range(n_sents):
+                #for j in range(sent_lens[i]):                    
+                    #token = batch[i][j] 
+                    #embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
+                    #if self.use_pos_tags:
+                        #pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
+                    #if self.use_lemmas:
+                        #lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                          
+                    #gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
                     
                     # Uncomment for time major
                     #embedded_sents[j, i] = token.embedding.numpy() # convert torch tensor to numpy array
                     #gold_tags[j, i] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)  
             
-            
+            if self.use_pos_tags:
+                pos_tags = np.zeros([n_sents, max_sent_len]) 
+            if self.use_lemmas:
+                lemmas = np.zeros([n_sents, max_sent_len]) 
+            if self.use_cle:
+                char_seq_map = {'<pad>': 0}
+                char_seqs = [[0]]
+                char_seq_ids = []                      
+            for i in range(n_sents):
+                ids = np.zeros([max_sent_len])
+                for j in range(sent_lens[i]):                    
+                    token = batch[i][j]
+                    
+                    #print(token.text, len(token.text))
+                    
+                    #embedding = [token._embeddings[emb] for emb in sorted(token._embeddings.keys()) if emb.static_embeddings]
+                    
+                    embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
+                    if self.use_pos_tags:
+                        pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
+                    if self.use_lemmas:
+                        lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                            
+                    
+                    if self.use_cle:
+                        if token.text not in char_seq_map:
+                            char_seq = [self.char_dict.get_idx_for_item(c) for c in token.text]
+                            char_seq_map[token.text] = len(char_seqs)
+                            char_seqs.append(char_seq)
+                            
+                        ids[j] = char_seq_map[token.text]                            
+                    
+                    gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
+                 
+                # Append sentence char_seq_ids
+                if self.use_cle:
+                    char_seq_ids.append(ids)            
             
             feed_dict = {self.sentence_lens: sent_lens,
                          self.embedded_sents: embedded_sents,
                          self.is_training: False}                              
             
+            if self.use_cle:
+                # Pad char sequences
+                char_seqs.sort(key=lambda i: len(i), reverse=True)
+                max_char_seq = len(char_seqs[0])
+                n = len(char_seqs)
+                batch_char_seqs = np.zeros([n, max_char_seq])
+                for i in range(n):
+                    batch_char_seqs[i, 0:len(char_seqs[i])] = char_seqs[i]
+                
+                feed_dict[self.char_seqs] = batch_char_seqs
+                feed_dict[self.char_seq_ids] = char_seq_ids
+                            
             if self.use_pos_tags:
                 feed_dict[self.pos_tags] = pos_tags                              
             if self.use_lemmas:
@@ -711,29 +896,68 @@ if __name__ == "__main__":
     import os
     import re
     from flair.data_fetcher import NLPTaskDataFetcher
-    from flair.embeddings import CharLMEmbeddings, WordEmbeddings, StackedEmbeddings
+    from flair.embeddings import CharLMEmbeddings, WordEmbeddings, CharacterEmbeddings, StackedEmbeddings
     from flair.data import Sentence
     import numpy as np
     
     # Fix random seed
     np.random.seed(42)
 
+    # Parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--batch_size", default=32, type=int, help="Batch size.")
+    parser.add_argument("--dev_batch_size", default=32, type=int, help="Batch size for dev.")
+    parser.add_argument("--rnn_cell", default="LSTM", type=str, help="RNN cell type.")
+    parser.add_argument("--rnn_dim", default=256, type=int, help="RNN cell dimension.")    
+    parser.add_argument("--optimizer", default="SGD", type=str, help="Optimizer.")    
+    parser.add_argument("--momentum", default=None, type=float, help="Momentum.")    
+    parser.add_argument("--cle_dim", default=16, type=int, help="Character-level embedding dimension.")
+    parser.add_argument("--cnne_filters", default=64, type=int, help="CNN embedding filters per length.")
+    parser.add_argument("--cnne_max", default=8, type=int, help="Maximum CNN filter length.")
+    parser.add_argument("--epochs", default=150, type=int, help="Number of epochs.")
+    parser.add_argument("--lr", default=0.1, type=float, help="Initial learning rate.") 
+    parser.add_argument("--final_lr", default=.001, type=float, help="Final learning rate.")    
+    parser.add_argument("--dropout", default=0, type=float, help="Dropout rate.")
+    parser.add_argument("--locked_dropout", default=.5, type=float, help="Locked/Variational dropout rate.")
+    parser.add_argument("--word_dropout", default=.05, type=float, help="Word dropout rate.")
+    parser.add_argument("--use_crf", default=False, type=bool, help="Conditional random field decoder.")
+    parser.add_argument("--use_pos_tags", default=False, type=bool, help="PoS tag embeddings.")
+    parser.add_argument("--use_lemmas", default=False, type=bool, help="Lemma embeddings.")
+    parser.add_argument("--use_word_emb", default=False, type=bool, help="Pretrained word embeddings.")        
+    parser.add_argument("--use_cle", default=False, type=bool, help="Character level embeddings.")
+    parser.add_argument("--clip_gradient", default=.25, type=float, help="Norm for gradient clipping.")
+    parser.add_argument("--layers", default=1, type=int, help="Number of rnn layers.")
+    parser.add_argument("--annealing_factor", default=.5, type=float, help="Patience for lr schedule.")    
+    parser.add_argument("--patience", default=20, type=int, help="Patience for lr schedule.")    
+    parser.add_argument("--bn", default=False, type=bool, help="Batch normalization.")
+
+    args = parser.parse_args()
+
     # Create logdir name
     logdir = "logs/{}-{}".format(
     #logdir = "/home/lief/files/tagger/logs/{}-{}".format(
     os.path.basename(__file__),
-        datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"))
-    
+        #datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"))
+        datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
+        ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
+)    
     # Get the corpus
     
     #tag_type = "pos"                                                                                                                        
     #fh = "/home/liefe/data/pt/UD_Portuguese-Bosque"  # pos                                                                                  
     #cols = {1:"text", 2:"lemma", 3:"pos"}                                                                                                   
  
-    tag_type = "pos"
-    fh = "/home/liefe/data/pt/pos/macmorpho"
+
+    tag_type = "pos"                                                                                                                        
+    #fh = "/home/lief/files/data/pt/pos/macmorpho1"
+    #fh = "/home/lief/files/data/pt/pos/macmorpho"   # v3    
+    fh = "/home/liefe/data/pt/pos/macmorpho1"
     cols = {0:"text", 1:"pos"}
+     
     
+    #tag_type = "pos"    
+    #fh = "/home/liefe/data/cs/pos"
+    #cols = {0:"text", 1:"lemma", 2:"pos"}
     
     #fh = "/home/liefe/data/pt/ner/harem" # ner
     ##fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
@@ -756,31 +980,55 @@ if __name__ == "__main__":
                                                     test_file="test.txt")
     
 
-    # Load festText word embeddings 
-    word_embedding = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
-    #word_embedding = WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv")
+    corpus.print_statistics()
     
+    # Stack embeddings
+    embeddings = []
+    
+    # Load festText word embeddings     
+    if args.use_word_emb:
+        embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
+        #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
+        
     # Load Character Language Models (clms)
-    clm_fw = CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")  
-    clm_bw = CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")    
-    #clm_fw = CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt")
-    #clm_bw = CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt")
-    
+    embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+    embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt", use_cache=False))
+    #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt", use_cache=False))
+
+    ## Trainable character level embeddings
+    #if args.use_cle:
+        #embeddings.append(CharacterEmbeddings())
+        
     # Instantiate StackedEmbeddings
-    print("Getting embeddings")    
-    stacked_embeddings = StackedEmbeddings(embeddings=[word_embedding, clm_fw, clm_bw])
+    print("Stacking embeddings")    
+    stacked_embeddings = StackedEmbeddings(embeddings)
     
     # Construct the tagger
     print("Constructing tagger")
     #path = "/home/liefe/tag/logs/mwe-150-16-16-20-pos/best-model.ckpt"
     #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
-    tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, dropout=0, locked_dropout=.5, word_dropout=.05, use_lemmas=False, use_pos_tags=False)
+    #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, dropout=a, locked_dropout=.5, word_dropout=.05, use_lemmas=False, use_pos_tags=False)
+    tagger = SequenceTagger(args, corpus, stacked_embeddings, tag_type)
     
     # Train
-    print("Beginning training")    
-    tagger.train(epochs=50, batch_size=32, dev_batch_size=32, patience=5, checkpoint=True, embeddings_in_memory=False)   
+    print("Beginning training") 
+    tagger.train(args, checkpoint=True, embeddings_in_memory=False)   
      
     # Test 
     test_data = corpus.test
     tagger.evaluate("test", test_data, test_mode=True)
     
+    
+    #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type)    
+    ## Train                                                                                                                                  
+    #print("Beginning training")
+    #tagger.train(checkpoint=True, embeddings_in_memory=True)
+
+    ## Test                                                                                                                                   
+    #test_data = corpus.test
+    #tagger.evaluate("test", test_data, test_mode=True, embeddings_in_memory=True)
+
+
