@@ -11,30 +11,7 @@ from flair.data import Dictionary
 
 
 class SequenceTagger:
-
-    #def __init__(self, 
-                 #args,
-                 #corpus,
-                 #embedding,
-                 #tag_type,
-                 #rnn_cell=args.rnn_cell,    
-                 #rnn_dim=args.rnn_dim,
-                 #optimizer=args.optimizer, 
-                 #momentum=args.momentum,
-                 #dropout=args.dropout,
-                 #locked_dropout=args.locked_dropout,
-                 #word_dropout=args.word_dropout,
-                 #clip_gradient=args.clip_gradient,
-                 #use_crf=args.use_crf,
-                 #use_pos_tags=args.use_pos_tags,
-                 #use_lemmas=args.use_lemmas,
-                 #use_cle=args.use_cle,
-                 #cle_dim=args.cle_dim,
-                 #cnne_max=args.cnne_max,
-                 #seed=42,
-                 #restore_model=False,
-                 #model_path=None,
-                 #char_dict_path=None):                  
+                
     def __init__(self, 
                  args,
                  corpus,
@@ -45,21 +22,21 @@ class SequenceTagger:
                  model_path=None,
                  char_dict_path=None):  
         
-        rnn_cell=args.rnn_cell    
-        rnn_dim=args.rnn_dim
-        optimizer=args.optimizer 
-        momentum=args.momentum
-        dropout=args.dropout
-        locked_dropout=args.locked_dropout
-        word_dropout=args.word_dropout
-        clip_gradient=args.clip_gradient
-        use_crf=args.use_crf
-        use_pos_tags=args.use_pos_tags
-        use_lemmas=args.use_lemmas
-        use_cle=args.use_cle
-        cle_dim=args.cle_dim
-        cnne_max=args.cnne_max
-        seed=42
+        rnn_cell = args.rnn_cell    
+        rnn_dim = args.rnn_dim
+        optimizer = args.optimizer 
+        momentum = args.momentum
+        dropout = args.dropout
+        locked_dropout = args.locked_dropout
+        word_dropout = args.word_dropout
+        clip_gradient = args.clip_gradient
+        use_crf = args.use_crf
+        use_pos_tags = args.use_pos_tags
+        use_lemmas = args.use_lemmas
+        use_cle = args.use_cle
+        cle_dim = args.cle_dim
+        cnne_max = args.cnne_max
+        seed = 42
         
         self.corpus = corpus # flair corpus type: List of Sentences  
         self.embedding = embedding # flair LM embedding or stacked type
@@ -83,9 +60,6 @@ class SequenceTagger:
             self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag
         if use_lemmas:
             self.lemma_dict = corpus.make_tag_dictionary("lemma")  # id to tag
-                     
-        #print(tag_type, self.tag_dict.idx2item)
-        #print(corpus.train)
         
         # Create graph and session
         graph = tf.Graph()
@@ -111,7 +85,10 @@ class SequenceTagger:
             self.is_training = tf.placeholder(tf.bool, [], name="is_training")
             # Shape = (batch_size)
             self.sentence_lens = tf.placeholder(tf.int32, [None], name="sentence_lens")
-  
+            
+            inputs = self.embedded_sents
+            
+            # PoS embeddings
             if self.use_pos_tags:
                 # Shape = (batch_size, max_sent_len)                
                 self.pos_tags = tf.placeholder(tf.int32, [None, None], name="tags")
@@ -121,6 +98,7 @@ class SequenceTagger:
                 #self.embedded_sents = tf.concat([self.embedded_sents, embedded_pos_tags], axis=2)
                 inputs = tf.concat([self.embedded_sents, embedded_pos_tags], axis=2)
             
+            # Lemma embeddings
             if self.use_lemmas:
                 # Shape = (batch_size, max_sent_len)                
                 self.lemmas = tf.placeholder(tf.int32, [None, None], name="lemmas")
@@ -129,7 +107,7 @@ class SequenceTagger:
                 embedded_lemmas = tf.nn.embedding_lookup(lemma_embedding, self.lemmas)
                 inputs = tf.concat([self.embedded_sents, embedded_lemmas], axis=2)
             
-            
+            # Character embeddings
             if self.use_cle:
                 
                 # Build char dictionary
@@ -167,26 +145,8 @@ class SequenceTagger:
                 # by self.charseq_ids (using tf.nn.embedding_lookup).
                 cnne = tf.nn.embedding_lookup(features_concat, self.char_seq_ids)
                 # Concatenate the word embeddings (computed above) and the CNNE (in this order).
-                inputs = tf.concat([self.embedded_sents, cnne], axis=2)
-                
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
+                inputs = tf.concat([inputs, cnne], axis=2)
+                  
             # Normal dropout
             if dropout:
                 inputs = tf.nn.dropout(inputs, 1-dropout)
@@ -194,7 +154,6 @@ class SequenceTagger:
             # Apply word dropout
             if word_dropout:
                 inputs = self.word_dropout(inputs, word_dropout)
-            
                     
             # Default learning rate
             self.lr = args.lr
@@ -315,28 +274,18 @@ class SequenceTagger:
                 tf.contrib.summary.initialize(session=self.session, graph=self.session.graph)
 
 
-    #def train(self, 
-              #lr=args.lr,
-              #final_lr=args.final_lr,
-              #batch_size=args.batch_size,
-              #dev_batch_size=args.dev_batch_size,
-              #epochs=args.epochs,
-              #annealing_factor=args.annealing_factor,
-              #patience=args.patience,
-              #embeddings_in_memory=False,
-              #checkpoint=False):
     def train(self, 
               args,
               embeddings_in_memory=False,
               checkpoint=False): 
         
-        lr=args.lr
-        final_lr=args.final_lr
-        batch_size=args.batch_size
-        dev_batch_size=args.dev_batch_size
-        epochs=args.epochs
-        annealing_factor=args.annealing_factor
-        patience=args.patience
+        lr = args.lr
+        final_lr = args.final_lr
+        batch_size = args.batch_size
+        dev_batch_size = args.dev_batch_size
+        epochs = args.epochs
+        annealing_factor = args.annealing_factor
+        patience = args.patience
         
         # Instantiate scheduler for learning rate annealing
         self.scheduler = ReduceLROnPlateau(lr, annealing_factor, patience)
@@ -367,18 +316,14 @@ class SequenceTagger:
                 batch.sort(key=lambda i: len(i), reverse=True)
                 
                 # Remove super long sentences                
-                
-                #print("max sent len", max_sent_len)
                 max_sent_len = len(batch[0])                                    
-                while len(batch) > 1 and max_sent_len > 100:
-                    #print("removing long sentence")
+                while len(batch) > 1 and max_sent_len > 200:
                     batch = batch[1:]
                     max_sent_len = len(batch[0])                    
                     
                 sent_lens = [len(s.tokens) for s in batch]
                 n_sents = len(sent_lens)     
                 
-                #print("embedding sents")
                 # Embed sentences using flair embeddings
                 self.embedding.embed(batch)            
                 
@@ -394,15 +339,11 @@ class SequenceTagger:
                     char_seq_map = {'<pad>': 0}
                     char_seqs = [[0]]
                     char_seq_ids = []                      
+                
                 for i in range(n_sents):
                     ids = np.zeros([max_sent_len])
                     for j in range(sent_lens[i]):                    
                         token = batch[i][j]
-                        
-                        #print(token.text, len(token.text))
-                        
-                        #embedding = [token._embeddings[emb] for emb in sorted(token._embeddings.keys()) if emb.static_embeddings]
-                        
                         embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
                         if self.use_pos_tags:
                             pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
@@ -422,23 +363,18 @@ class SequenceTagger:
                     # Append sentence char_seq_ids
                     if self.use_cle:
                         char_seq_ids.append(ids)
-                        
-                        # Uncomment for time major
-                        #embedded_sents[j, i] = token.embedding.numpy() # convert torch tensor to numpy array
-                        #gold_tags[j, i] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)  
 
-                #print("running graph")
-                # Run graph for batch
-                
                 feed_dict = {self.sentence_lens: sent_lens,
                              self.embedded_sents: embedded_sents,
                              self.gold_tags: gold_tags, 
                              self.is_training: True}                              
                 
+                # Pad char sequences                
                 if self.use_cle:
-                    # Pad char sequences
-                    char_seqs.sort(key=lambda i: len(i), reverse=True)
-                    max_char_seq = len(char_seqs[0])
+                    #char_seqs.sort(key=lambda i: len(i), reverse=True)
+                    char_seq_lens = [len(char_seq) for char_seq in char_seqs]
+                    #max_char_seq = len(char_seqs[0])
+                    max_char_seq = max(char_seq_lens)
                     n = len(char_seqs)
                     batch_char_seqs = np.zeros([n, max_char_seq])
                     for i in range(n):
@@ -453,28 +389,15 @@ class SequenceTagger:
                 if self.use_lemmas:
                     feed_dict[self.lemmas] = lemmas
        
-                
-
-                    
-                    
-                #_, _, loss, predicted_tag_ids = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
-                                 #{self.sentence_lens: sent_lens,
-                                  #self.embedded_sents: embedded_sents,
-                                  #self.pos_tags: pos_tags,
-                                  #self.gold_tags: gold_tags, 
-                                  #self.is_training: True})
            
                 _, _, loss, predicted_tag_ids = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
                                  feed_dict)
-                    
-                #print("annotating tags")
-                # DEBUG: Add predicted tag to each token (annotate)    
+   
                 for i in range(n_sents):
                     for j in range(sent_lens[i]):
                         token = batch[i][j]
                         predicted_tag = self.tag_dict.get_item_for_index(predicted_tag_ids[i][j])
                         token.add_tag('predicted', predicted_tag)
-                        #print(token, predicted_tag)
     
                 # Tally metrics        
                 for sentence in batch:
@@ -495,7 +418,7 @@ class SequenceTagger:
                             totals_per_tag[tag]['fn'] += 1  
                         else:
                             totals['tn'] +=1
-                            totals_per_tag[tag]['tn'] += 1 # tn?
+                            totals_per_tag[tag]['tn'] += 1 
                  
                 self.metrics.log_metrics("train", totals, totals_per_tag, epoch, batch_n)                
                 
@@ -525,9 +448,10 @@ class SequenceTagger:
                                 
     def evaluate(self, dataset_name, dataset, eval_batch_size=32, epoch=None, test_mode=False, embeddings_in_memory=False, metric="accuracy"):
         
-        print("evaluating")
+        print("Evaluating")
         
         self.session.run(self.reset_metrics)  # for batch statistics
+        
         # Get batches
         batches = [dataset[x:x+eval_batch_size] for x in range(0, len(dataset), eval_batch_size)]
         
@@ -544,9 +468,7 @@ class SequenceTagger:
             
             # Remove super long sentences                
             max_sent_len = len(batch[0])
-            #print("max sent len", max_sent_len)
             while len(batch) > 1 and max_sent_len > 200:
-                #print("removing long sentence")
                 batch = batch[1:]
                 max_sent_len = len(batch[0])                    
                 
@@ -559,26 +481,6 @@ class SequenceTagger:
             # Pad sentences and tags
             embedded_sents = np.zeros([n_sents, max_sent_len, self.embedding_dim])
             gold_tags = np.zeros([n_sents, max_sent_len]) 
-            
-            #if self.use_pos_tags:
-                #pos_tags = np.zeros([n_sents, max_sent_len]) 
-            #if self.use_lemmas:
-                #lemmas = np.zeros([n_sents, max_sent_len]) 
-                 
-            #for i in range(n_sents):
-                #for j in range(sent_lens[i]):                    
-                    #token = batch[i][j] 
-                    #embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
-                    #if self.use_pos_tags:
-                        #pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
-                    #if self.use_lemmas:
-                        #lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                          
-                    #gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
-                    
-                    # Uncomment for time major
-                    #embedded_sents[j, i] = token.embedding.numpy() # convert torch tensor to numpy array
-                    #gold_tags[j, i] = tag_dict.get_idx_for_item(token.get_tag(tag_type).value)  
-            
             if self.use_pos_tags:
                 pos_tags = np.zeros([n_sents, max_sent_len]) 
             if self.use_lemmas:
@@ -591,17 +493,11 @@ class SequenceTagger:
                 ids = np.zeros([max_sent_len])
                 for j in range(sent_lens[i]):                    
                     token = batch[i][j]
-                    
-                    #print(token.text, len(token.text))
-                    
-                    #embedding = [token._embeddings[emb] for emb in sorted(token._embeddings.keys()) if emb.static_embeddings]
-                    
                     embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
                     if self.use_pos_tags:
                         pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
                     if self.use_lemmas:
                         lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                            
-                    
                     if self.use_cle:
                         if token.text not in char_seq_map:
                             char_seq = [self.char_dict.get_idx_for_item(c) for c in token.text]
@@ -619,11 +515,13 @@ class SequenceTagger:
             feed_dict = {self.sentence_lens: sent_lens,
                          self.embedded_sents: embedded_sents,
                          self.is_training: False}                              
-            
+        
+            # Pad char sequences            
             if self.use_cle:
-                # Pad char sequences
-                char_seqs.sort(key=lambda i: len(i), reverse=True)
-                max_char_seq = len(char_seqs[0])
+                #char_seqs.sort(key=lambda i: len(i), reverse=True)
+                char_seq_lens = [len(char_seq) for char_seq in char_seqs]
+                #max_char_seq = len(char_seqs[0])
+                max_char_seq = max(char_seq_lens)
                 n = len(char_seqs)
                 batch_char_seqs = np.zeros([n, max_char_seq])
                 for i in range(n):
@@ -646,17 +544,6 @@ class SequenceTagger:
                                                                        self.predictions],
                                                                       feed_dict)   
             
-            #else:
-                #_, _, dev_loss, predicted_tag_ids =  self.session.run([self.update_accuracy, 
-                                                              #self.update_loss, 
-                                                              #self.current_loss, 
-                                                              #self.predictions],
-                                                             #{self.sentence_lens: sent_lens,
-                                                              #self.embedded_sents: embedded_sents,
-                                                              #self.gold_tags: gold_tags, 
-                                                              #self.is_training: False})                     
-               
-               
                 print("dev loss ", dev_loss)
             
             # For test data
@@ -664,11 +551,6 @@ class SequenceTagger:
                 #if self.use_pos_tags:
                 predicted_tag_ids = self.session.run(self.predictions,
                                                      feed_dict)                
-                #else:
-                    #predicted_tag_ids = self.session.run(self.predictions,
-                                                         #{self.sentence_lens: sent_lens,
-                                                          #self.embedded_sents: embedded_sents,
-                                                          #self.is_training: False})                      
                 
             # Add predicted tag to each token (annotate)    
             for i in range(n_sents):
@@ -677,16 +559,6 @@ class SequenceTagger:
                     predicted_tag = self.tag_dict.get_item_for_index(predicted_tag_ids[i][j])
                     token.add_tag('predicted', predicted_tag)
 
-           
-            #for sentence in batch:
-                #spans = sentence.get_spans("predicted")
-                #for span in spans:
-                    #if span:
-                        #print(span.text)
-                    #for token in span.tokens:
-                        #print(token.text, token.get_tag(self.tag_type).value, token.get_tag("predicted").value)
-
-           
             # Tally metrics        
             for sentence in batch:
                 gold_tags = [(tag.tag, str(tag)) for tag in sentence.get_spans(self.tag_type)]
@@ -732,7 +604,6 @@ class SequenceTagger:
             return
         
         # Save and print metrics                  
-        #self.metrics.log_metrics(dataset_name, totals, totals_per_tag, batch_n)
         self.metrics.print_metrics()
         
         if metric == "accuracy":
@@ -750,9 +621,7 @@ class SequenceTagger:
     def word_dropout(self, x, dropout_rate):
         mask = tf.distributions.Bernoulli(1 - dropout_rate, 
                                           dtype=tf.float32).sample([tf.shape(x)[0], tf.shape(x)[1], 1])                                        
-        
-        #print(sess.run(mask))
-        
+                
         return mask * x        
 
 
@@ -933,20 +802,19 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Create logdir name
-    logdir = "logs/{}-{}".format(
+    # Create logdir name  
+    logdir = "logs/{}-{}-{}".format(
     #logdir = "/home/lief/files/tagger/logs/{}-{}".format(
-    os.path.basename(__file__),
-        #datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"))
+        os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
-)    
+    )
+    
     # Get the corpus
     
     #tag_type = "pos"                                                                                                                        
     #fh = "/home/liefe/data/pt/UD_Portuguese-Bosque"  # pos                                                                                  
     #cols = {1:"text", 2:"lemma", 3:"pos"}                                                                                                   
- 
 
     tag_type = "pos"                                                                                                                        
     #fh = "/home/lief/files/data/pt/pos/macmorpho1"
@@ -979,7 +847,6 @@ if __name__ == "__main__":
                                                     dev_file="dev.txt", 
                                                     test_file="test.txt")
     
-
     corpus.print_statistics()
     
     # Stack embeddings
@@ -998,10 +865,6 @@ if __name__ == "__main__":
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt", use_cache=False))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt", use_cache=False))
 
-    ## Trainable character level embeddings
-    #if args.use_cle:
-        #embeddings.append(CharacterEmbeddings())
-        
     # Instantiate StackedEmbeddings
     print("Stacking embeddings")    
     stacked_embeddings = StackedEmbeddings(embeddings)
@@ -1022,13 +885,3 @@ if __name__ == "__main__":
     tagger.evaluate("test", test_data, test_mode=True)
     
     
-    #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type)    
-    ## Train                                                                                                                                  
-    #print("Beginning training")
-    #tagger.train(checkpoint=True, embeddings_in_memory=True)
-
-    ## Test                                                                                                                                   
-    #test_data = corpus.test
-    #tagger.evaluate("test", test_data, test_mode=True, embeddings_in_memory=True)
-
-
