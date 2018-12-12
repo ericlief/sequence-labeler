@@ -79,6 +79,8 @@ class SequenceTagger:
             self.char_seq_ids = tf.placeholder(tf.int32, [None, None], name="char_seq_ids")
             # Shape = (num_char_seqs, indef]
             self.char_seqs = tf.placeholder(tf.int32, [None, None], name="char_seqs")
+            # Shape = (batch_size)
+            self.char_seq_lens = tf.placeholder(tf.int32, [None], name="char_seq_lens")
             # Shape = (batch_size, max_sent_len)
             self.gold_tags = tf.placeholder(tf.int32, [None, None], name="tags")            
             # Trainable params or not
@@ -86,8 +88,10 @@ class SequenceTagger:
             # Shape = (batch_size)
             self.sentence_lens = tf.placeholder(tf.int32, [None], name="sentence_lens")
             
+            # Default learning rate
+            self.lr = args.lr
             inputs = self.embedded_sents
-            
+        
             # PoS embeddings
             if self.use_pos_tags:
                 # Shape = (batch_size, max_sent_len)                
@@ -109,43 +113,85 @@ class SequenceTagger:
             
             # Character embeddings
             if self.use_cle:
-                
-                # Build char dictionary
-                if char_dict_path is None:
-                    self.char_dict = Dictionary.load('common-chars')
-                else:
-                    self.char_dict = Dictionary.load_from_file(cle_path)    
-                num_chars = len(self.char_dict.idx2item)
-              
-     
-                # Generate character embeddings for num_chars of dimensionality cle_dim.
-                char_embeddings = tf.get_variable('char_embeddings', [num_chars, cle_dim])
-                
-                # Embed self.chaseqs (list of unique words in the batch) using the character embeddings.
-                embedded_chars = tf.nn.embedding_lookup(char_embeddings, self.char_seqs)
-                # For kernel sizes of {2..args.cnne_max}, do the following:
-                # - use `tf.layers.conv1d` on input embedded characters, with given kernel size
-                #   and `args.cnne_filters`; use `VALID` padding, stride 1 and no activation.
-                # - perform channel-wise max-pooling over the whole word, generating output
-                #   of size `args.cnne_filters` for every word.
-                features = []
-                for kernel_size in range(2, args.cnne_max + 1):
-                    conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
-                    # Apply batch norm
-                    if args.bn:
-                        conv = tf.layers.batch_normalization(conv, training=self.is_training, name='cnn_layer_BN_'+str(kernel_size))
-                    pooling = tf.reduce_max(conv, axis=1)
-                    features.append(pooling)
-           
-                # Concatenate the computed features (in the order of kernel sizes 2..args.cnne_max).
-                # Consequently, each word from `self.charseqs` is represented using convolutional embedding
-                # (CNNE) of size `(args.cnne_max-1)*args.cnne_filters`.                
-                features_concat = tf.concat(features, axis=1)
-                # Generate CNNEs of all words in the batch by indexing the just computed embeddings
-                # by self.charseq_ids (using tf.nn.embedding_lookup).
-                cnne = tf.nn.embedding_lookup(features_concat, self.char_seq_ids)
-                # Concatenate the word embeddings (computed above) and the CNNE (in this order).
-                inputs = tf.concat([inputs, cnne], axis=2)
+                with tf.variable_scope('cle'):
+                   
+                    # Build char dictionary
+                    if char_dict_path is None:
+                        self.char_dict = Dictionary.load('common-chars')
+                    else:
+                        self.char_dict = Dictionary.load_from_file(cle_path)    
+                    num_chars = len(self.char_dict.idx2item)
+                    
+         
+                    # Generate character embeddings for num_chars of dimensionality cle_dim.
+                    char_embeddings = tf.get_variable('char_embeddings', [num_chars, cle_dim])
+                    
+                    # Embed self.chaseqs (list of unique words in the batch) using the character embeddings.
+                    embedded_chars = tf.nn.embedding_lookup(char_embeddings, self.char_seqs)
+                    
+                    
+                    # TODO: Use `tf.nn.bidirectional_dynamic_rnn` to process embedded self.charseqs using
+                    # a GRU cell of dimensionality `args.cle_dim`.
+                    # Add locked/variational dropout wrapper
+                    # Choose RNN cell according to args.rnn_cell (LSTM and GRU)
+                    if rnn_cell == 'GRU':
+                        cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
+                        cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
+        
+                    elif rnn_cell == 'LSTM':
+                        cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
+                        cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
+        
+                    else: 
+                        raise Exception("Must select an rnn cell type")     
+                    
+                    
+                    cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
+                    cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
+                    
+                    # Run cell in limited scope fw and bw
+                    # in order to encode char information (subword factors)
+                    # The cell is size of char dim, e.g. 32 -> output (?,32)
+                    outputs, states = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, 
+                                                                      cell_bw=cell_bw, 
+                                                                      inputs=embedded_chars, 
+                                                                      sequence_length=self.char_seq_lens, 
+                                                                      dtype=tf.float32, 
+                                                                      scope="cle")
+                    
+                    # Sum the resulting fwd and bwd state to generate character-level word embedding (CLE)
+                    # of unique words in the batch 
+                    #print(states[0])
+                    #states = states[0] + states[1] 
+                    #cle = tf.add(states[0], states[1])
+                    cle = tf.reduce_sum(states, axis=0)                
+                    emb = tf.nn.embedding_lookup(cle, self.char_seq_ids)
+                    # Concatenate the stacked embeddings and the cle (in this order).
+                    inputs = tf.concat([inputs, cle], axis=-1)                    
+                    
+                    ## For kernel sizes of {2..args.cnne_max}, do the following:
+                    ## - use `tf.layers.conv1d` on input embedded characters, with given kernel size
+                    ##   and `args.cnne_filters`; use `VALID` padding, stride 1 and no activation.
+                    ## - perform channel-wise max-pooling over the whole word, generating output
+                    ##   of size `args.cnne_filters` for every word.
+                    #features = []
+                    #for kernel_size in range(2, args.cnne_max + 1):
+                        #conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                        ## Apply batch norm
+                        #if args.bn:
+                            #conv = tf.layers.batch_normalization(conv, training=self.is_training, name='cnn_layer_BN_'+str(kernel_size))
+                        #pooling = tf.reduce_max(conv, axis=1)
+                        #features.append(pooling)
+               
+                    ## Concatenate the computed features (in the order of kernel sizes 2..args.cnne_max).
+                    ## Consequently, each word from `self.charseqs` is represented using convolutional embedding
+                    ## (CNNE) of size `(args.cnne_max-1)*args.cnne_filters`.                
+                    #features_concat = tf.concat(features, axis=1)
+                    ## Generate CNNEs of all words in the batch by indexing the just computed embeddings
+                    ## by self.charseq_ids (using tf.nn.embedding_lookup).
+                    #cnne = tf.nn.embedding_lookup(features_concat, self.char_seq_ids)
+                    ## Concatenate the word embeddings (computed above) and the CNNE (in this order).
+                    #inputs = tf.concat([inputs, cnne], axis=-1)
                   
             # Normal dropout
             if dropout:
@@ -155,10 +201,6 @@ class SequenceTagger:
             if word_dropout:
                 inputs = self.word_dropout(inputs, word_dropout)
                     
-            # Default learning rate
-            self.lr = args.lr
-            
-            # Choose RNN cell according to args.rnn_cell (LSTM and GRU)
             if rnn_cell == 'GRU':
                 cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
                 cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
@@ -168,8 +210,8 @@ class SequenceTagger:
                 cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
 
             else: 
-                raise Exception("Must select an rnn cell type")     
-
+                raise Exception("Must select an rnn cell type")      
+            
             # Add locked/variational dropout wrapper
             cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
             cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
@@ -180,7 +222,8 @@ class SequenceTagger:
                                                          inputs=inputs, 
                                                          sequence_length=self.sentence_lens, 
                                                          dtype=tf.float32,
-                                                         time_major=False)
+                                                         time_major=False,
+                                                         scope='tagger')
 
             if dropout:
                 outputs = tf.nn.dropout(outputs, 1-dropout)
@@ -337,7 +380,7 @@ class SequenceTagger:
                     lemmas = np.zeros([n_sents, max_sent_len]) 
                 if self.use_cle:
                     char_seq_map = {'<pad>': 0}
-                    char_seqs = [[0]]
+                    char_seqs = [[char_seq_map['<pad>']]]
                     char_seq_ids = []                      
                 
                 for i in range(n_sents):
@@ -382,6 +425,7 @@ class SequenceTagger:
                     
                     feed_dict[self.char_seqs] = batch_char_seqs
                     feed_dict[self.char_seq_ids] = char_seq_ids
+                    feed_dict[self.char_seq_lens] = char_seq_lens
                     
                 if self.use_pos_tags:
                     feed_dict[self.pos_tags] = pos_tags
@@ -489,7 +533,7 @@ class SequenceTagger:
                 lemmas = np.zeros([n_sents, max_sent_len]) 
             if self.use_cle:
                 char_seq_map = {'<pad>': 0}
-                char_seqs = [[0]]
+                char_seqs = [[char_seq_map['<pad>']]]
                 char_seq_ids = []                      
             for i in range(n_sents):
                 ids = np.zeros([max_sent_len])
@@ -531,6 +575,7 @@ class SequenceTagger:
                 
                 feed_dict[self.char_seqs] = batch_char_seqs
                 feed_dict[self.char_seq_ids] = char_seq_ids
+                feed_dict[self.char_seq_lens] = char_seq_lens
                             
             if self.use_pos_tags:
                 feed_dict[self.pos_tags] = pos_tags                              
