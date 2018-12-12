@@ -282,7 +282,7 @@ class SequenceTagger:
         lr = args.lr
         final_lr = args.final_lr
         batch_size = args.batch_size
-        dev_batch_size = args.dev_batch_size
+        eval_batch_size = args.eval_batch_size
         epochs = args.epochs
         annealing_factor = args.annealing_factor
         patience = args.patience
@@ -432,7 +432,7 @@ class SequenceTagger:
            
             # Evaluate with dev data
             dev_data = corpus.dev                
-            dev_score = self.evaluate("dev", dev_data, dev_batch_size, epoch, embeddings_in_memory=embeddings_in_memory)
+            dev_score = self.evaluate(args, "dev", dev_data, epoch, embeddings_in_memory=embeddings_in_memory)
              
             # Perform one step on lr scheduler
             is_reduced = self.scheduler.step(dev_score)
@@ -446,7 +446,9 @@ class SequenceTagger:
                 save_path = self.saver.save(self.session, "{}/best-model.ckpt".format(logdir))
                 print("Best model saved at ", save_path)
                                 
-    def evaluate(self, dataset_name, dataset, eval_batch_size=32, epoch=None, test_mode=False, embeddings_in_memory=False, metric="accuracy"):
+    def evaluate(self, args, dataset_name, dataset, epoch=None, test_mode=False, embeddings_in_memory=False, metric="accuracy"):
+
+        eval_batch_size = args.eval_batch_size
         
         print("Evaluating")
         
@@ -775,7 +777,7 @@ if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", default=32, type=int, help="Batch size.")
-    parser.add_argument("--dev_batch_size", default=32, type=int, help="Batch size for dev.")
+    parser.add_argument("--eval_batch_size", default=32, type=int, help="Batch size for dev.")
     parser.add_argument("--rnn_cell", default="LSTM", type=str, help="RNN cell type.")
     parser.add_argument("--rnn_dim", default=256, type=int, help="RNN cell dimension.")    
     parser.add_argument("--optimizer", default="SGD", type=str, help="Optimizer.")    
@@ -799,12 +801,13 @@ if __name__ == "__main__":
     parser.add_argument("--annealing_factor", default=.5, type=float, help="Patience for lr schedule.")    
     parser.add_argument("--patience", default=20, type=int, help="Patience for lr schedule.")    
     parser.add_argument("--bn", default=False, type=bool, help="Batch normalization.")
-
+    parser.add_argument("--tag_type", default=None, type=str, help="Task.")
+    
     args = parser.parse_args()
 
     # Create logdir name  
-    logdir = "logs/{}-{}-{}".format(
-    #logdir = "/home/lief/files/tagger/logs/{}-{}".format(
+    #logdir = "logs/{}-{}-{}".format(
+    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -816,21 +819,22 @@ if __name__ == "__main__":
     #fh = "/home/liefe/data/pt/UD_Portuguese-Bosque"  # pos                                                                                  
     #cols = {1:"text", 2:"lemma", 3:"pos"}                                                                                                   
 
-    tag_type = "pos"                                                                                                                        
+    #tag_type = "pos"                                                                                                                       
     #fh = "/home/lief/files/data/pt/pos/macmorpho1"
     #fh = "/home/lief/files/data/pt/pos/macmorpho"   # v3    
-    fh = "/home/liefe/data/pt/pos/macmorpho1"
-    cols = {0:"text", 1:"pos"}
+    #fh = "/home/liefe/data/pt/pos/macmorpho1"
+    #cols = {0:"text", 1:"pos"}
      
     
     #tag_type = "pos"    
     #fh = "/home/liefe/data/cs/pos"
     #cols = {0:"text", 1:"lemma", 2:"pos"}
     
+    tag_type = "ne"    
     #fh = "/home/liefe/data/pt/ner/harem" # ner
-    ##fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
-    #cols = {0:"text", 1:"ne"}    
-    #tag_type = "ne"    
+    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
+    cols = {0:"text", 1:"ne"}    
+    
 
 
     #tag_type = "mwe"
@@ -838,7 +842,8 @@ if __name__ == "__main__":
     #fh = "/home/lief/files/data/pt/mwe" 
     #cols = {1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 10:"mwe"}
     #cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
-    
+
+
     # Fetch corpus
     print("Getting corpus")
     corpus = NLPTaskDataFetcher.fetch_column_corpus(fh, 
@@ -854,16 +859,16 @@ if __name__ == "__main__":
     
     # Load festText word embeddings     
     if args.use_word_emb:
-        embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
-        #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
+        #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
+        embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         
     # Load Character Language Models (clms)
-    embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-    embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
-    #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt", use_cache=False))
-    #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt", use_cache=False))
+    embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
+    embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
 
     # Instantiate StackedEmbeddings
     print("Stacking embeddings")    
@@ -874,14 +879,14 @@ if __name__ == "__main__":
     #path = "/home/liefe/tag/logs/mwe-150-16-16-20-pos/best-model.ckpt"
     #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
     #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, dropout=a, locked_dropout=.5, word_dropout=.05, use_lemmas=False, use_pos_tags=False)
-    tagger = SequenceTagger(args, corpus, stacked_embeddings, tag_type)
+    tagger = SequenceTagger(args, corpus, stacked_embeddings, args.tag_type)
     
     # Train
     print("Beginning training") 
-    tagger.train(args, checkpoint=True, embeddings_in_memory=False)   
+    tagger.train(args, checkpoint=True, embeddings_in_memory=True)   
      
     # Test 
     test_data = corpus.test
-    tagger.evaluate("test", test_data, test_mode=True)
+    tagger.evaluate("test", args, test_data, test_mode=True, embeddings_in_memory=True)
     
     
