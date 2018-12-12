@@ -128,7 +128,7 @@ class SequenceTagger:
                     
                     # Embed self.chaseqs (list of unique words in the batch) using the character embeddings.
                     embedded_chars = tf.nn.embedding_lookup(char_embeddings, self.char_seqs)
-                    
+                    print('emb chars', embedded_chars)
                     
                     # TODO: Use `tf.nn.bidirectional_dynamic_rnn` to process embedded self.charseqs using
                     # a GRU cell of dimensionality `args.cle_dim`.
@@ -152,22 +152,27 @@ class SequenceTagger:
                     # Run cell in limited scope fw and bw
                     # in order to encode char information (subword factors)
                     # The cell is size of char dim, e.g. 32 -> output (?,32)
-                    outputs, states = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, 
+                    self.outputs, self.states = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, 
                                                                       cell_bw=cell_bw, 
                                                                       inputs=embedded_chars, 
                                                                       sequence_length=self.char_seq_lens, 
-                                                                      dtype=tf.float32, 
-                                                                      scope="cle")
+                                                                      dtype=tf.float32)
                     
                     # Sum the resulting fwd and bwd state to generate character-level word embedding (CLE)
                     # of unique words in the batch 
-                    #print(states[0])
-                    #states = states[0] + states[1] 
+                    #print(states)
+                    #print(states[0], states[1])
+                    #cle = states[0] + states[1] 
+                    #print('cle', cle)
                     #cle = tf.add(states[0], states[1])
-                    cle = tf.reduce_sum(states, axis=0)                
+                    cle = tf.reduce_sum([self.states[0][1], self.states[1][1]], axis=0)
+                    #cle = tf.concat([self.states[0][1], self.states[1][1]], axis=-1)
+                    #cle = tf.reduce_sum(states, axis=0) 
+                    #print(cle)
                     emb = tf.nn.embedding_lookup(cle, self.char_seq_ids)
+                    #print(emb)
                     # Concatenate the stacked embeddings and the cle (in this order).
-                    inputs = tf.concat([inputs, cle], axis=-1)                    
+                    inputs = tf.concat([inputs, emb], axis=-1)                    
                     
                     ## For kernel sizes of {2..args.cnne_max}, do the following:
                     ## - use `tf.layers.conv1d` on input embedded characters, with given kernel size
@@ -385,6 +390,8 @@ class SequenceTagger:
                 
                 for i in range(n_sents):
                     ids = np.zeros([max_sent_len])
+                    
+                    # Next sentence
                     for j in range(sent_lens[i]):                    
                         token = batch[i][j]
                         embedded_sents[i, j] = token.embedding.numpy() # convert torch tensor to numpy array
@@ -406,6 +413,7 @@ class SequenceTagger:
                     # Append sentence char_seq_ids
                     if self.use_cle:
                         char_seq_ids.append(ids)
+                        #print('ids', char_seq_ids)
 
                 feed_dict = {self.sentence_lens: sent_lens,
                              self.embedded_sents: embedded_sents,
@@ -436,7 +444,13 @@ class SequenceTagger:
            
                 _, _, loss, predicted_tag_ids = self.session.run([self.training, self.summaries["train"], self.loss, self.predictions],
                                  feed_dict)
-   
+                #out, states = self.session.run([self.outputs, self.states],
+                                                  #feed_dict)
+                #print('outputs', out)
+                #print('states', states)
+                
+                
+                
                 for i in range(n_sents):
                     for j in range(sent_lens[i]):
                         token = batch[i][j]
@@ -851,8 +865,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Create logdir name  
-    #logdir = "logs/{}-{}-{}".format(
-    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    logdir = "logs/{}-{}-{}".format(
+    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -876,11 +890,9 @@ if __name__ == "__main__":
     #cols = {0:"text", 1:"lemma", 2:"pos"}
     
     tag_type = "ne"    
-    #fh = "/home/liefe/data/pt/ner/harem" # ner
-    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
-    cols = {0:"text", 1:"ne"}    
-    
-
+    fh = "/home/liefe/data/pt/ner/harem" # ner
+    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
+    cols = {0:"text", 1:"ne"}   
 
     #tag_type = "mwe"
     #fh = "/home/liefe/data/pt/mwe"
@@ -904,16 +916,16 @@ if __name__ == "__main__":
     
     # Load festText word embeddings     
     if args.use_word_emb:
-        #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
-        embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
+        embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
+        #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         
     # Load Character Language Models (clms)
-    #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-    #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-    #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw_p25/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
-    #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw_p25/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
-    embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
-    embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
+    embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+    embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
+    #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
 
     # Instantiate StackedEmbeddings
     print("Stacking embeddings")    
@@ -928,10 +940,10 @@ if __name__ == "__main__":
     
     # Train
     print("Beginning training") 
-    tagger.train(args, checkpoint=True, embeddings_in_memory=True)   
+    tagger.train(args, checkpoint=True, embeddings_in_memory=False)   
      
     # Test 
     test_data = corpus.test
-    tagger.evaluate("test", args, test_data, test_mode=True, embeddings_in_memory=True)
+    tagger.evaluate("test", args, test_data, test_mode=True, embeddings_in_memory=False)
     
     
