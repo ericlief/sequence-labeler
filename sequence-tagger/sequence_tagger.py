@@ -134,17 +134,20 @@ class SequenceTagger:
                     # a GRU cell of dimensionality `args.cle_dim`.
                     # Add locked/variational dropout wrapper
                     # Choose RNN cell according to args.rnn_cell (LSTM and GRU)
-                    if rnn_cell == 'GRU':
-                        cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
-                        cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
+                    # if rnn_cell == 'GRU':
+                    #     cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
+                    #     cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
         
-                    elif rnn_cell == 'LSTM':
-                        cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
-                        cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
+                    # elif rnn_cell == 'LSTM':
+                    #     cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
+                    #     cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
         
-                    else: 
-                        raise Exception("Must select an rnn cell type")     
+                    # else: 
+                    #     raise Exception("Must select an rnn cell type")     
                     
+                    
+                    cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
+                    cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
                     
                     cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
                     cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
@@ -152,7 +155,7 @@ class SequenceTagger:
                     # Run cell in limited scope fw and bw
                     # in order to encode char information (subword factors)
                     # The cell is size of char dim, e.g. 32 -> output (?,32)
-                    self.outputs, self.states = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, 
+                    outputs, states = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, 
                                                                       cell_bw=cell_bw, 
                                                                       inputs=embedded_chars, 
                                                                       sequence_length=self.char_seq_lens, 
@@ -165,9 +168,9 @@ class SequenceTagger:
                     #cle = states[0] + states[1] 
                     #print('cle', cle)
                     #cle = tf.add(states[0], states[1])
-                    cle = tf.reduce_sum([self.states[0][1], self.states[1][1]], axis=0)
+                    #cle = tf.reduce_sum([self.states[0][1], self.states[1][1]], axis=0)
                     #cle = tf.concat([self.states[0][1], self.states[1][1]], axis=-1)
-                    #cle = tf.reduce_sum(states, axis=0) 
+                    cle = tf.reduce_sum(states, axis=0) 
                     #print(cle)
                     emb = tf.nn.embedding_lookup(cle, self.char_seq_ids)
                     #print(emb)
@@ -227,8 +230,7 @@ class SequenceTagger:
                                                          inputs=inputs, 
                                                          sequence_length=self.sentence_lens, 
                                                          dtype=tf.float32,
-                                                         time_major=False,
-                                                         scope='tagger')
+                                                         time_major=False)
 
             if dropout:
                 outputs = tf.nn.dropout(outputs, 1-dropout)
@@ -865,8 +867,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Create logdir name  
-    logdir = "logs/{}-{}-{}".format(
-    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    #logdir = "logs/{}-{}-{}".format(
+    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -890,8 +892,8 @@ if __name__ == "__main__":
     #cols = {0:"text", 1:"lemma", 2:"pos"}
     
     tag_type = "ne"    
-    fh = "/home/liefe/data/pt/ner/harem" # ner
-    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                         
+    #fh = "/home/liefe/data/pt/ner/harem" # ner
+    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                        
     cols = {0:"text", 1:"ne"}   
 
     #tag_type = "mwe"
@@ -916,14 +918,16 @@ if __name__ == "__main__":
     
     # Load festText word embeddings     
     if args.use_word_emb:
-        embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
-        #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
+        #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
+        embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         
     # Load Character Language Models (clms)
-    embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-    embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+    #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
+    embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/fw_p25/best-lm.pt", use_cache=False))
+    embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/bw_p25/best-lm.pt", use_cache=False))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
 
@@ -936,14 +940,14 @@ if __name__ == "__main__":
     #path = "/home/liefe/tag/logs/mwe-150-16-16-20-pos/best-model.ckpt"
     #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
     #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, dropout=a, locked_dropout=.5, word_dropout=.05, use_lemmas=False, use_pos_tags=False)
-    tagger = SequenceTagger(args, corpus, stacked_embeddings, args.tag_type)
+    tagger = SequenceTagger(args, corpus, stacked_embeddings, tag_type)
     
     # Train
     print("Beginning training") 
-    tagger.train(args, checkpoint=True, embeddings_in_memory=False)   
+    tagger.train(args, checkpoint=True, embeddings_in_memory=True)   
      
     # Test 
     test_data = corpus.test
-    tagger.evaluate("test", args, test_data, test_mode=True, embeddings_in_memory=False)
+    tagger.evaluate(args, "test",  test_data, test_mode=True, embeddings_in_memory=True)
     
     
