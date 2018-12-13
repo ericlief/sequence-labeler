@@ -693,7 +693,7 @@ class SequenceTagger:
 class Metrics:
     """Helper class to calculate and store metrics"""
     
-    def log_metrics(self, dataset_name, totals, totals_per_tag, epoch, batch_n, lr=None, bad_epochs=None, dev_score=None):
+    def log_metrics(self, dataset_name, totals, totals_per_tag, epoch, batch_n, lr=0, bad_epochs=0, dev_score=0):
         
         self.totals = totals
         self.totals_per_tag = totals_per_tag
@@ -882,21 +882,21 @@ if __name__ == "__main__":
     #fh = "/home/liefe/data/pt/UD_Portuguese-Bosque"  # pos                                                                                  
     #cols = {1:"text", 2:"lemma", 3:"pos"}                                                                                                   
 
-    #tag_type = "pos"                                                                                                                       
-    #fh = "/home/lief/files/data/pt/pos/macmorpho1"
+    tag_type = "pos"                                                                                                                       
+    fh = "/home/lief/files/data/pt/pos/macmorpho1"
     #fh = "/home/lief/files/data/pt/pos/macmorpho"   # v3    
     #fh = "/home/liefe/data/pt/pos/macmorpho1"
-    #cols = {0:"text", 1:"pos"}
+    cols = {0:"text", 1:"pos"}
      
     
     #tag_type = "pos"    
     #fh = "/home/liefe/data/cs/pos"
     #cols = {0:"text", 1:"lemma", 2:"pos"}
     
-    tag_type = "ne"    
+    #tag_type = "ne"    
     #fh = "/home/liefe/data/pt/ner/harem" # ner
-    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                        
-    cols = {0:"text", 1:"ne"}   
+    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                        
+    #cols = {0:"text", 1:"ne"}   
 
     #tag_type = "mwe"
     #fh = "/home/liefe/data/pt/mwe"
