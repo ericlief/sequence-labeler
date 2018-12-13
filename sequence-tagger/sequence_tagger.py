@@ -33,7 +33,7 @@ class SequenceTagger:
         use_crf = args.use_crf
         use_pos_tags = args.use_pos_tags
         use_lemmas = args.use_lemmas
-        use_cle = args.use_cle
+        use_char_emb = args.use_char_emb
         cle_dim = args.cle_dim
         cnne_max = args.cnne_max
         seed = 42
@@ -45,7 +45,7 @@ class SequenceTagger:
         self.metrics = Metrics() # for logging metrics
         self.use_pos_tags = use_pos_tags # train with pos tags
         self.use_lemmas = use_lemmas # train with lemmas
-        self.use_cle = use_cle # train character-level embeddings
+        self.use_char_emb = use_char_emb # train character-level embeddings
         
         # Make the tag dictionary from the corpus
         self.tag_dict = corpus.make_tag_dictionary(tag_type=tag_type)  # id to tag
@@ -112,7 +112,7 @@ class SequenceTagger:
                 inputs = tf.concat([self.embedded_sents, embedded_lemmas], axis=2)
             
             # Character embeddings
-            if self.use_cle:
+            if self.use_char_emb:
                 with tf.variable_scope('cle'):
                    
                     # Build char dictionary
@@ -344,7 +344,8 @@ class SequenceTagger:
         self.session.run(self.reset_metrics)
         
         # Train epochs
-        train_data = corpus.train  
+        train_data = corpus.train
+        self.dev_score = 0        
         for epoch in range(epochs):
             
             # Stop if lr gets to small
@@ -385,7 +386,7 @@ class SequenceTagger:
                     pos_tags = np.zeros([n_sents, max_sent_len]) 
                 if self.use_lemmas:
                     lemmas = np.zeros([n_sents, max_sent_len]) 
-                if self.use_cle:
+                if self.use_char_emb:
                     char_seq_map = {'<pad>': 0}
                     char_seqs = [[char_seq_map['<pad>']]]
                     char_seq_ids = []                      
@@ -402,7 +403,7 @@ class SequenceTagger:
                         if self.use_lemmas:
                             lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                            
                         
-                        if self.use_cle:
+                        if self.use_char_emb:
                             if token.text not in char_seq_map:
                                 char_seq = [self.char_dict.get_idx_for_item(c) for c in token.text]
                                 char_seq_map[token.text] = len(char_seqs)
@@ -413,7 +414,7 @@ class SequenceTagger:
                         gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
                      
                     # Append sentence char_seq_ids
-                    if self.use_cle:
+                    if self.use_char_emb:
                         char_seq_ids.append(ids)
                         #print('ids', char_seq_ids)
 
@@ -423,7 +424,7 @@ class SequenceTagger:
                              self.is_training: True}                              
                 
                 # Pad char sequences                
-                if self.use_cle:
+                if self.use_char_emb:
                     #char_seqs.sort(key=lambda i: len(i), reverse=True)
                     char_seq_lens = [len(char_seq) for char_seq in char_seqs]
                     #max_char_seq = len(char_seqs[0])
@@ -480,7 +481,7 @@ class SequenceTagger:
                             totals['tn'] +=1
                             totals_per_tag[tag]['tn'] += 1 
                  
-                self.metrics.log_metrics("train", totals, totals_per_tag, epoch, batch_n)                
+                self.metrics.log_metrics("train", totals, totals_per_tag, epoch, batch_n, self.lr, self.scheduler.bad_epochs, self.dev_score)                
                 
                 if not embeddings_in_memory:
                     self.clear_embeddings_in_batch(batch)                
@@ -492,17 +493,17 @@ class SequenceTagger:
            
             # Evaluate with dev data
             dev_data = corpus.dev                
-            dev_score = self.evaluate(args, "dev", dev_data, epoch, embeddings_in_memory=embeddings_in_memory)
+            self.dev_score = self.evaluate(args, "dev", dev_data, epoch, embeddings_in_memory=embeddings_in_memory)
              
             # Perform one step on lr scheduler
-            is_reduced = self.scheduler.step(dev_score)
+            is_reduced = self.scheduler.step(self.dev_score)
             # LR has been reduced on scheduler, update global 
             if is_reduced:
                 self.lr = self.scheduler.lr
-            print("Epoch {} batch {}: train loss \t{}\t lr \t{}\t dev score \t{}\t bad epochs \t{}".format(epoch, batch_n, loss, self.lr, dev_score, self.scheduler.bad_epochs))        
+            print("Epoch {} batch {}: train loss \t{}\t lr \t{}\t dev score \t{}\t bad epochs \t{}".format(epoch, batch_n, loss, self.lr, self.dev_score, self.scheduler.bad_epochs))        
             
             # Save best model
-            if dev_score == self.scheduler.best:
+            if self.dev_score == self.scheduler.best:
                 save_path = self.saver.save(self.session, "{}/best-model.ckpt".format(logdir))
                 print("Best model saved at ", save_path)
                                 
@@ -547,7 +548,7 @@ class SequenceTagger:
                 pos_tags = np.zeros([n_sents, max_sent_len]) 
             if self.use_lemmas:
                 lemmas = np.zeros([n_sents, max_sent_len]) 
-            if self.use_cle:
+            if self.use_char_emb:
                 char_seq_map = {'<pad>': 0}
                 char_seqs = [[char_seq_map['<pad>']]]
                 char_seq_ids = []                      
@@ -560,7 +561,7 @@ class SequenceTagger:
                         pos_tags[i, j] = self.pos_tag_dict.get_idx_for_item(token.get_tag("upos").value)
                     if self.use_lemmas:
                         lemmas[i, j] = self.lemma_dict.get_idx_for_item(token.get_tag("lemma").value)                            
-                    if self.use_cle:
+                    if self.use_char_emb:
                         if token.text not in char_seq_map:
                             char_seq = [self.char_dict.get_idx_for_item(c) for c in token.text]
                             char_seq_map[token.text] = len(char_seqs)
@@ -571,7 +572,7 @@ class SequenceTagger:
                     gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
                  
                 # Append sentence char_seq_ids
-                if self.use_cle:
+                if self.use_char_emb:
                     char_seq_ids.append(ids)            
             
             feed_dict = {self.sentence_lens: sent_lens,
@@ -579,7 +580,7 @@ class SequenceTagger:
                          self.is_training: False}                              
         
             # Pad char sequences            
-            if self.use_cle:
+            if self.use_char_emb:
                 #char_seqs.sort(key=lambda i: len(i), reverse=True)
                 char_seq_lens = [len(char_seq) for char_seq in char_seqs]
                 #max_char_seq = len(char_seqs[0])
@@ -692,7 +693,7 @@ class SequenceTagger:
 class Metrics:
     """Helper class to calculate and store metrics"""
     
-    def log_metrics(self, dataset_name, totals, totals_per_tag, epoch, batch_n):
+    def log_metrics(self, dataset_name, totals, totals_per_tag, epoch, batch_n, lr=None, bad_epochs=None, dev_score=None):
         
         self.totals = totals
         self.totals_per_tag = totals_per_tag
@@ -717,7 +718,8 @@ class Metrics:
             except ZeroDivisionError: 
                 self.f1 = 0            
             # Save
-            f.write("\nEpoch {} Batch {}: tp {}\t fp {}\t tn {}\t fn {}\t acc {:.3f}\t prec {:.3f}\trec\t{:.3f}\tf1 {:.3f}\n".format(epoch, batch_n, totals['tp'], totals['fp'], totals['tn'], totals['fn'], self.accuracy, self.precision, self.recall, self.f1))            
+            f.write("\nEpoch {}\t Batch {}\t Bad epochs {}\t Dev score {:.3f} \n".format(epoch, batch_n, bad_epochs, dev_score ))                        
+            f.write("tp {}\t fp {}\t tn {}\t fn {}\t acc {:.3f}\t prec {:.3f}\trec\t{:.3f}\tf1 {:.3f}\n".format(totals['tp'], totals['fp'], totals['tn'], totals['fn'], self.accuracy, self.precision, self.recall, self.f1))            
            
             # Metrics per tag
             for tag in totals_per_tag:
@@ -856,7 +858,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_pos_tags", default=False, type=bool, help="PoS tag embeddings.")
     parser.add_argument("--use_lemmas", default=False, type=bool, help="Lemma embeddings.")
     parser.add_argument("--use_word_emb", default=False, type=bool, help="Pretrained word embeddings.")        
-    parser.add_argument("--use_cle", default=False, type=bool, help="Character level embeddings.")
+    parser.add_argument("--use_char_emb", default=False, type=bool, help="Character level embeddings.")
     parser.add_argument("--clip_gradient", default=.25, type=float, help="Norm for gradient clipping.")
     parser.add_argument("--layers", default=1, type=int, help="Number of rnn layers.")
     parser.add_argument("--annealing_factor", default=.5, type=float, help="Patience for lr schedule.")    
