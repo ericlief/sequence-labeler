@@ -263,9 +263,8 @@ class SequenceTagger:
                 # Generate `self.predictions`.
                 self.predictions = tf.argmax(logits, axis=-1) # 3rd dim!                
 
-
             global_step = tf.train.create_global_step()            
-
+  
             # Choose optimizer                                              
             if args.optimizer == "SGD" and args.momentum:
                 optimizer = tf.train.MomentumOptimizer(learning_rate=self.scheduler.lr, momentum=args.momentum) 
@@ -281,11 +280,19 @@ class SequenceTagger:
             gradients, variables = zip(*optimizer.compute_gradients(self.loss))
             # Compute norm of gradients using `tf.global_norm` into `gradient_norm`.
             gradient_norm = tf.global_norm(gradients) 
+            
             # If args.clip_gradient, clip gradients (back into `gradients`) using `tf.clip_by_global_norm`.            
             if args.clip_gradient is not None:
                 gradients, _ = tf.clip_by_global_norm(gradients, clip_norm=args.clip_gradient, use_norm=gradient_norm)
-            self.training = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
-
+            
+            # Update ops for bn
+            if args.bn:
+                update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+                with tf.control_dependencies(update_ops):     
+                    self.training = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
+            else:
+                self.training = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
+                
             # Summaries
             self.current_accuracy, self.update_accuracy = tf.metrics.accuracy(self.gold_tags, self.predictions, weights=weights)
             self.current_loss, self.update_loss = tf.metrics.mean(self.loss, weights=tf.reduce_sum(weights))
@@ -659,7 +666,7 @@ class SequenceTagger:
                         totals['tn'] +=1
                         totals_per_tag[tag]['tn'] += 1 # tn?
              
-            self.metrics.log_metrics(dataset_name, totals, totals_per_tag, epoch, batch_n)
+            self.metrics.log_metrics(dataset_name, totals, totals_per_tag, epoch, batch_n, self.scheduler.lr, self.scheduler.bad_epochs)
 
             
             if not embeddings_in_memory:
@@ -731,7 +738,7 @@ class Metrics:
             except ZeroDivisionError: 
                 self.f1 = 0            
             # Save
-            f.write("\nEpoch {}\t Batch {}\t Bad epochs {}\t Dev score {:.3f} \n".format(epoch, batch_n, bad_epochs, dev_score ))                        
+            f.write("\nEpoch {}\t Batch {}\t lr {}\tBad epochs {}\t Dev score {:.3f} \n".format(epoch, batch_n, lr, bad_epochs, dev_score ))                        
             f.write("tp {}\t fp {}\t tn {}\t fn {}\t acc {:.3f}\t prec {:.3f}\trec\t{:.3f}\tf1 {:.3f}\n".format(totals['tp'], totals['fp'], totals['tn'], totals['fn'], self.accuracy, self.precision, self.recall, self.f1))            
            
             # Metrics per tag
@@ -884,8 +891,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Create logdir name  
-    #logdir = "logs/{}-{}-{}".format(
-    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    logdir = "logs/{}-{}-{}".format(
+    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -909,8 +916,8 @@ if __name__ == "__main__":
     
                                                                                                    
     tag_type = "ne"
-    #fh = "/home/liefe/data/pt/ner/harem" # ner
-    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0
+    fh = "/home/liefe/data/pt/ner/harem" # ner
+    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0
     cols = {0:"text", 1:"ne"}    
     
 
@@ -949,20 +956,20 @@ if __name__ == "__main__":
 
     embeddings = []
     if args.use_word_emb:
-        #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
-        embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
+        embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
+        #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         
     # Load Character Language Models (clms)
     
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     if args.use_lm:
-        embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/fw_p25/best-lm.pt", use_cache=False))
-        embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/bw_p25/best-lm.pt", use_cache=False))
+        #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/fw_p25/best-lm.pt", use_cache=False))
+        #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/bw_p25/best-lm.pt", use_cache=False))
         #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
         #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
-        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
+        embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+        embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
     
     # Instantiate StackedEmbeddings
     print("Stacking embeddings")    
