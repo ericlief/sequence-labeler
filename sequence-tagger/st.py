@@ -19,62 +19,30 @@ class SequenceTagger:
                  restore_model=False,
                  model_path=None,
                  char_dict_path=None):  
-
-        rnn_cell = args.rnn_cell    
-        rnn_dim = args.rnn_dim
-        optimizer = args.optimizer 
-        momentum = args.momentum
-        dropout = args.dropout
-        locked_dropout = args.locked_dropout
-        word_dropout = args.word_dropout
-        clip_gradient = args.clip_gradient
-        use_crf = args.use_crf
-        use_pos_tags = args.use_pos_tags
-        use_lemmas = args.use_lemmas
-        use_char_emb = args.use_char_emb
-        cle_dim = args.cle_dim
-        cnne_max = args.cnne_max
-        bn = args.bn
-        
-    #def __init__(self, 
-                 #corpus,
-                 #embedding,
-                 #tag_type,
-                 #rnn_cell="LSTM",    
-                 #rnn_dim=256,
-                 #optimizer="SGD", 
-                 #momentum=False,
-                 #dropout=.0,
-                 #locked_dropout=.5,
-                 #word_dropout=.0,
-                 #clip_gradient=.25,
-                 #use_crf=True,
-                 #use_pos_tags=False,
-                 #use_lemmas=False,
-                 #threads=1, 
-                 #seed=42,
-                 #restore_model=False,
-                 #model_path=None):                  
+      
         
         self.corpus = corpus # flair corpus type: List of Sentences  
         self.embedding = embedding # flair LM embedding or stacked type
         self.embedding_dim = embedding.embedding_length # the total/concatenated length
         self.tag_type = tag_type # what we're predicting
         self.metrics = Metrics() # for logging metrics
-        self.use_pos_tags = use_pos_tags # train with pos tags
-        self.use_lemmas = use_lemmas # train with lemmas
+        self.use_pos_tags = args.use_pos_tags # train with pos tags
+        self.use_lemmas = args.use_lemmas # train with lemmas
+        
+        # Instantiate scheduler for learning rate annealing
+        self.scheduler = ReduceLROnPlateau(args.lr, args.annealing_factor, args.patience) 
         
         # Make the tag dictionary from the corpus
         self.tag_dict = corpus.make_tag_dictionary(tag_type=tag_type)  # id to tag
         n_tags = len(self.tag_dict)
         
-        print(self.tag_dict.idx2item, n_tags)
-        print(corpus.train[0][0].text)
+        #print(self.tag_dict.idx2item, n_tags)
+        #print(corpus.train[0][0].text)
         
         # Make dictionary for pos tags and lemmas if desired
-        if use_pos_tags:
+        if self.use_pos_tags:
             self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag
-        if use_lemmas:
+        if self.use_lemmas:
             self.lemma_dict = corpus.make_tag_dictionary("lemma")  # id to tag
                      
         #print(tag_type, self.tag_dict.idx2item)
@@ -86,9 +54,9 @@ class SequenceTagger:
         self.session = tf.Session(graph = graph, config=tf.ConfigProto(log_device_placement=False))
         
         # Construct graph
-        self.construct(rnn_cell, rnn_dim, optimizer, momentum, bn, dropout, locked_dropout, word_dropout, clip_gradient, n_tags, use_crf, restore_model, model_path)
+        self.construct(args, n_tags, restore_model, model_path)
         
-    def construct(self, rnn_cell, rnn_dim, optimizer, momentum, bn, dropout, locked_dropout, word_dropout, clip_gradient, n_tags, use_crf, restore_model, model_path):
+    def construct(self, args, n_tags, restore_model, model_path):
         
         with self.session.graph.as_default():
 
@@ -101,13 +69,14 @@ class SequenceTagger:
             # Shape = (batch_size)
             self.sentence_lens = tf.placeholder(tf.int32, [None], name="sentence_lens")
   
+            inputs = self.embedded_sents
             if self.use_pos_tags:
                 # Shape = (batch_size, max_sent_len)                
                 self.pos_tags = tf.placeholder(tf.int32, [None, None], name="tags")
                 n_pos_tags = len(self.pos_tag_dict)
                 pos_tag_embedding = tf.get_variable("tag_embedding", [n_pos_tags, rnn_dim], tf.float32)
                 embedded_pos_tags = tf.nn.embedding_lookup(pos_tag_embedding, self.pos_tags)
-                self.embedded_sents = tf.concat([self.embedded_sents, embedded_pos_tags], axis=2)
+                inputs = tf.concat([inputs, embedded_pos_tags], axis=2)
             
             if self.use_lemmas:
                 # Shape = (batch_size, max_sent_len)                
@@ -115,49 +84,48 @@ class SequenceTagger:
                 n_lemmas = len(self.lemma_dict)
                 lemma_embedding = tf.get_variable("lemma_embedding", [n_lemmas, rnn_dim], tf.float32)
                 embedded_lemmas = tf.nn.embedding_lookup(pos_tag_embedding, self.pos_tags)
-                self.embedded_sents = tf.concat([self.embedded_sents, embedded_lemmas], axis=2)
-
-
-            if bn:
-                self.embedded_sents = tf.layers.batch_normalization(self.embedded_sents, training=self.is_training, name='bn')
+                inputs = tf.concat([inputs, embedded_lemmas], axis=2)
+            
+            # Apply batch normalization
+            if args.bn:
+                inputs = tf.layers.batch_normalization(inputs, training=self.is_training, name='bn')
                     
             # Normal dropout
-            if dropout:
-                self.embedded_sents = tf.nn.dropout(self.embedded_sents, 1-dropout)
+            if args.dropout:
+                inputs = tf.nn.dropout(inputs, 1-dropout)
             
             # Apply word dropout
-            if word_dropout:
-                self.embedded_sents = self.word_dropout(self.embedded_sents, word_dropout)
-            
+            if args.word_dropout:
+                inputs = self.word_dropout(inputs, args.word_dropout)
                     
             # Default learning rate
-            self.lr = .1
+            #self.lr = args.lr
             
             # Choose RNN cell according to args.rnn_cell (LSTM and GRU)
-            if rnn_cell == 'GRU':
-                cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
-                cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
+            if args.rnn_cell == 'GRU':
+                cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(args.rnn_dim)
+                cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(args.rnn_dim)
 
-            elif rnn_cell == 'LSTM':
-                cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
-                cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(rnn_dim)
+            elif args.rnn_cell == 'LSTM':
+                cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(args.rnn_dim)
+                cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(args.rnn_dim)
 
             else: 
                 raise Exception("Must select an rnn cell type")     
 
             # Add locked/variational dropout wrapper
-            cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
-            cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-locked_dropout, output_keep_prob=1-locked_dropout)
+            cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
+            cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
 
             # Process embedded inputs with rnn cell
-            outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw, 
-                                                         cell_bw=cell_bw, 
-                                                         inputs=self.embedded_sents, 
+            outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw, 
+                                                         cell_bw, 
+                                                         inputs, 
                                                          sequence_length=self.sentence_lens, 
                                                          dtype=tf.float32,
                                                          time_major=False)
 
-            if dropout:
+            if args.dropout:
                 outputs = tf.nn.dropout(outputs, 1-dropout)
                 
             # Concatenate the outputs for fwd and bwd directions (in the third dimension).
@@ -172,7 +140,7 @@ class SequenceTagger:
             weights = tf.sequence_mask(self.sentence_lens, dtype=tf.float32)
 
             # Use crf for decoding
-            if use_crf:
+            if args.use_crf:
 
                 # Compute log likelihood and transition parameters using tf.contrib.crf.crf_log_likelihood
                 # and store the mean of sentence losses into `loss`.
@@ -200,13 +168,13 @@ class SequenceTagger:
             global_step = tf.train.create_global_step()            
 
             # Choose optimizer                                              
-            if optimizer == "SGD" and momentum:
-                optimizer = tf.train.MomentumOptimizer(learning_rate=self.lr, momentum=momentum) 
+            if args.optimizer == "SGD" and args.momentum:
+                optimizer = tf.train.MomentumOptimizer(learning_rate=self.scheduler.lr, momentum=args.momentum) 
                 #self.training = tf.train.GradientDescentOptimizer(learning_rate) 
-            elif optimizer == "SGD":
-                optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.lr) 
+            elif args.optimizer == "SGD":
+                optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.scheduler.lr) 
             else:                
-                optimizer = tf.train.AdamOptimizer(learning_rate=self.lr) 
+                optimizer = tf.train.AdamOptimizer(learning_rate=self.scheduler.lr) 
 
             # Note how instead of `optimizer.minimize` we first get the # gradients using
             # `optimizer.compute_gradients`, then optionally clip them and
@@ -215,8 +183,8 @@ class SequenceTagger:
             # Compute norm of gradients using `tf.global_norm` into `gradient_norm`.
             gradient_norm = tf.global_norm(gradients) 
             # If args.clip_gradient, clip gradients (back into `gradients`) using `tf.clip_by_global_norm`.            
-            if clip_gradient is not None:
-                gradients, _ = tf.clip_by_global_norm(gradients, clip_norm=clip_gradient, use_norm=gradient_norm)
+            if args.clip_gradient is not None:
+                gradients, _ = tf.clip_by_global_norm(gradients, clip_norm=args.clip_gradient, use_norm=gradient_norm)
             self.training = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
 
             # Summaries
@@ -254,13 +222,13 @@ class SequenceTagger:
               embeddings_in_memory=False,
               checkpoint=False): 
         
-        lr = args.lr
-        final_lr = args.final_lr
-        batch_size = args.batch_size
-        eval_batch_size = args.eval_batch_size
-        epochs = args.epochs
-        annealing_factor = args.annealing_factor
-        patience = args.patience
+        #lr = args.lr
+        #final_lr = args.final_lr
+        #batch_size = args.batch_size
+        #eval_batch_size = args.eval_batch_size
+        #epochs = args.epochs
+        #annealing_factor = args.annealing_factor
+        #patience = args.patience
         
     #def train(self, 
               #lr=.1,
@@ -272,24 +240,25 @@ class SequenceTagger:
               #embeddings_in_memory=False,
               #checkpoint=False):
         
-        # Instantiate scheduler for learning rate annealing
-        self.scheduler = ReduceLROnPlateau(lr, annealing_factor, patience)
+        # moved sched
+        ## Instantiate scheduler for learning rate annealing
+        #self.scheduler = ReduceLROnPlateau(lr, annealing_factor, patience)
             
         # Reset batch metrics
         self.session.run(self.reset_metrics)
         
         # Train epochs
         train_data = corpus.train  
-        for epoch in range(epochs):
+        for epoch in range(args.epochs):
             
             # Stop if lr gets to small
-            if self.lr < .001:
-                print("Learning rate has become to small. Exiting training: lr=", self.lr)
+            if self.scheduler.lr < args.final_lr:
+                print("Learning rate has become to small. Exiting training: lr=", self.scheduler.lr)
                 break    
             
             # Shuffle data and form batches
             random.shuffle(train_data)
-            batches = [train_data[i:i + batch_size] for i in range(0, len(train_data), batch_size)]        
+            batches = [train_data[i:i + args.batch_size] for i in range(0, len(train_data), args.batch_size)]        
             
             # To store metrics
             totals_per_tag = defaultdict(lambda: defaultdict(int))
@@ -415,33 +384,34 @@ class SequenceTagger:
             # Evaluate with dev data
             dev_data = corpus.dev                
             #dev_score = self.evaluate("dev", dev_data, dev_batch_size, epoch, embeddings_in_memory=embeddings_in_memory)
-            self.dev_score = self.evaluate(args, "dev", dev_data, epoch, embeddings_in_memory=embeddings_in_memory)
+            dev_score = self.evaluate(args, "dev", dev_data, epoch, embeddings_in_memory=embeddings_in_memory)
              
             # Perform one step on lr scheduler
-            is_reduced = self.scheduler.step(self.dev_score)
-            if is_reduced:
-                self.lr = self.scheduler.lr
+            is_reduced = self.scheduler.step(dev_score)
+            #if is_reduced:
+                #self.lr = self.scheduler.lr
+                
             #print("Epoch {} batch {}: train loss \t{}\t lr \t{}\t dev score \t{}\t bad epochs \t{}".format(epoch, batch_n, loss, self.lr, dev_score, self.scheduler.bad_epochs))        
-            print("Epoch {} batch {}: train loss \t{}\t lr \t{}\t dev score \t{}\t bad epochs \t{}".format(epoch, batch_n, loss, self.lr, self.dev_score, self.scheduler.bad_epochs))        
+            print("Epoch {} batch {}: train loss \t{}\t lr \t{}\t dev score \t{}\t bad epochs \t{}".format(epoch, batch_n, loss, self.scheduler.lr, dev_score, self.scheduler.bad_epochs))        
             
             # Save best model
             #if dev_score == self.scheduler.best:
                 #save_path = self.saver.save(self.session, "{}/best-model.ckpt".format(logdir))
                 #print("Best model saved at ", save_path)
-            if self.dev_score == self.scheduler.best:
+            if dev_score == self.scheduler.best:
                 save_path = self.saver.save(self.session, "{}/best-model.ckpt".format(logdir))
                 print("Best model saved at ", save_path) 
 
     def evaluate(self, args, dataset_name, dataset, epoch=None, test_mode=False, embeddings_in_memory=False, metric="accuracy"):                
     #def evaluate(self, dataset_name, dataset, eval_batch_size=32, epoch=None, test_mode=False, embeddings_in_memory=False, metric="accuracy"):
         
-        eval_batch_size = args.eval_batch_size
+        #eval_batch_size = args.eval_batch_size
         
         print("evaluating")
         
         self.session.run(self.reset_metrics)  # for batch statistics
         # Get batches
-        batches = [dataset[x:x+eval_batch_size] for x in range(0, len(dataset), eval_batch_size)]
+        batches = [dataset[x:x + args.eval_batch_size] for x in range(0, len(dataset), args.eval_batch_size)]
         
         # To store metrics
         totals_per_tag = defaultdict(lambda: defaultdict(int))
@@ -802,8 +772,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Create logdir name  
-    #logdir = "logs/{}-{}-{}".format(
-    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    logdir = "logs/{}-{}-{}".format(
+    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -827,8 +797,8 @@ if __name__ == "__main__":
     
                                                                                                    
     tag_type = "ne"
-    #fh = "/home/liefe/data/pt/ner/harem" # ner
-    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0 
+    fh = "/home/liefe/data/pt/ner/harem" # ner
+    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0 
     cols = {0:"text", 1:"ne"}    
     
 
@@ -867,20 +837,21 @@ if __name__ == "__main__":
 
     embeddings = []
     if args.use_word_emb:
-        #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
-        embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
+        embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
+        #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         
     # Load Character Language Models (clms)
-    #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-    #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+    
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     if args.use_lm:
-        embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/fw_p25/best-lm.pt", use_cache=False))
-        embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/bw_p25/best-lm.pt", use_cache=False))
-    #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
-    #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
-
+        #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/fw_p25/best-lm.pt", use_cache=False))
+        #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/bw_p25/best-lm.pt", use_cache=False))
+        #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
+        #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
+        embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+        embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
+    
     # Instantiate StackedEmbeddings
     print("Stacking embeddings")    
     stacked_embeddings = StackedEmbeddings(embeddings)
