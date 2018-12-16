@@ -40,9 +40,9 @@ class SequenceTagger:
         #print(corpus.train[0][0].text)
         
         # Make dictionary for pos tags and lemmas if desired
-        if self.use_pos_tags:
+        if args.use_pos_tags:
             self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag
-        if self.use_lemmas:
+        if args.use_lemmas:
             self.lemma_dict = corpus.make_tag_dictionary("lemma")  # id to tag
                      
         #print(tag_type, self.tag_dict.idx2item)
@@ -54,9 +54,9 @@ class SequenceTagger:
         self.session = tf.Session(graph = graph, config=tf.ConfigProto(log_device_placement=False))
         
         # Construct graph
-        self.construct(args, n_tags, restore_model, model_path)
+        self.construct(args, n_tags, restore_model, model_path, char_dict_path)
         
-    def construct(self, args, n_tags, restore_model, model_path):
+    def construct(self, args, n_tags, restore_model, model_path, char_dict_path):
         
         with self.session.graph.as_default():
 
@@ -108,7 +108,7 @@ class SequenceTagger:
                     
          
                     # Generate character embeddings for num_chars of dimensionality cle_dim.
-                    char_embeddings = tf.get_variable('char_embeddings', [num_chars, cle_dim])
+                    char_embeddings = tf.get_variable('char_embeddings', [num_chars, args.cle_dim])
                     
                     # Embed self.chaseqs (list of unique words in the batch) using the character embeddings.
                     embedded_chars = tf.nn.embedding_lookup(char_embeddings, self.char_seqs)
@@ -130,8 +130,8 @@ class SequenceTagger:
                     #     raise Exception("Must select an rnn cell type")     
                     
                     
-                    cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
-                    cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(rnn_dim)
+                    cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(args.rnn_dim)
+                    cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(args.rnn_dim)
                     
                     cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
                     cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
@@ -377,7 +377,8 @@ class SequenceTagger:
                     char_seq_ids = []                       
                 
                 for i in range(n_sents):
-                    
+                    ids = np.zeros([max_sent_len])
+
                     # Next sentence                    
                     for j in range(sent_lens[i]):                    
                         token = batch[i][j]
@@ -394,6 +395,8 @@ class SequenceTagger:
                                 char_seq = [self.char_dict.get_idx_for_item(c) for c in token.text]
                                 char_seq_map[token.text] = len(char_seqs)
                                 char_seqs.append(char_seq)                        
+
+                            ids[j] = char_seq_map[token.text]     
                         gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
                         
                     
@@ -425,7 +428,7 @@ class SequenceTagger:
                     feed_dict[self.char_seq_lens] = char_seq_lens                
                 
                 
-                if self.use_pos_tags:
+                if args.use_pos_tags:
                     feed_dict[self.pos_tags] = pos_tags
                     
                     #feed_dict = {self.sentence_lens: sent_lens,
@@ -433,7 +436,7 @@ class SequenceTagger:
                                  #self.gold_tags: gold_tags, 
                                  #self.is_training: True})                    
                     
-                if self.use_lemmas:
+                if args.use_lemmas:
                     feed_dict[self.lemmas] = lemmas
        
                     
@@ -559,7 +562,8 @@ class SequenceTagger:
                 char_seq_ids = []    
                 
             for i in range(n_sents):
-                
+                ids = np.zeros([max_sent_len])
+
                 # Sentence
                 for j in range(sent_lens[i]):                    
                     token = batch[i][j] 
@@ -573,6 +577,8 @@ class SequenceTagger:
                             char_seq = [self.char_dict.get_idx_for_item(c) for c in token.text]
                             char_seq_map[token.text] = len(char_seqs)
                             char_seqs.append(char_seq)                    
+                        ids[j] = char_seq_map[token.text]                            
+
                     gold_tags[i, j] = self.tag_dict.get_idx_for_item(token.get_tag(self.tag_type).value)      # tag index         
              
                 # Append sentence char_seq_ids
@@ -838,7 +844,7 @@ if __name__ == "__main__":
     import re
     from flair.data_fetcher import NLPTaskDataFetcher
     from flair.embeddings import CharLMEmbeddings, WordEmbeddings, StackedEmbeddings
-    from flair.data import Sentence
+    from flair.data import Sentence, Dictionary
     import numpy as np
     
     # Fix random seed
@@ -878,8 +884,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Create logdir name  
-    logdir = "logs/{}-{}-{}".format(
-    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    #logdir = "logs/{}-{}-{}".format(
+    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -903,8 +909,8 @@ if __name__ == "__main__":
     
                                                                                                    
     tag_type = "ne"
-    fh = "/home/liefe/data/pt/ner/harem" # ner
-    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0 
+    #fh = "/home/liefe/data/pt/ner/harem" # ner
+    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0
     cols = {0:"text", 1:"ne"}    
     
 
@@ -943,20 +949,20 @@ if __name__ == "__main__":
 
     embeddings = []
     if args.use_word_emb:
-        embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
-        #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
+        #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
+        embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         
     # Load Character Language Models (clms)
     
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     if args.use_lm:
-        #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/fw_p25/best-lm.pt", use_cache=False))
-        #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/bw_p25/best-lm.pt", use_cache=False))
+        embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/fw_p25/best-lm.pt", use_cache=False))
+        embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/bw_p25/best-lm.pt", use_cache=False))
         #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
         #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
-        embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-        embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
+        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
     
     # Instantiate StackedEmbeddings
     print("Stacking embeddings")    
