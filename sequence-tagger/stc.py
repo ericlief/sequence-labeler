@@ -543,12 +543,12 @@ class SequenceTagger:
             max_sent_len = len(batch[0])
             
             # Remove super long sentences                            
-            if dataset_name != "test":
+            #if dataset_name != "test":
                 #print("max sent len", max_sent_len)
-                while len(batch) > 1 and max_sent_len > 200:
-                    #print("removing long sentence")
-                    batch = batch[1:]
-                    max_sent_len = len(batch[0])                    
+            while len(batch) > 1 and max_sent_len > 200:
+                #print("removing long sentence")
+                batch = batch[1:]
+                max_sent_len = len(batch[0])                    
                 
             sent_lens = [len(s.tokens) for s in batch]
             n_sents = len(sent_lens)             
@@ -640,7 +640,7 @@ class SequenceTagger:
                     token = batch[i][j]
                     predicted_tag = self.tag_dict.get_item_for_index(predicted_tag_ids[i][j])
                     token.add_tag('predicted', predicted_tag)
-           
+                            
             # Tally metrics        
             for sentence in batch:
                 gold_tags = [(tag.tag, str(tag)) for tag in sentence.get_spans(self.tag_type)]
@@ -682,7 +682,14 @@ class SequenceTagger:
                             token = batches[i][j][k]
                             gold_tag = token.get_tag(self.tag_type).value
                             predicted_tag = token.get_tag('predicted').value
-                            print("{} {} {}".format(token.text, gold_tag, predicted_tag), file=test_file)
+                            if predicted_tag != '':
+                                print("{} {} {}".format(token.text, gold_tag, predicted_tag), file=test_file)
+                            else:
+                                print('null tag')
+                                if self.tag_type == "ne" or self.tag_type == "mwe":
+                                    print("{} {} O".format(token.text, gold_tag), file=test_file)
+                                elif self.tag_type == "pos":
+                                    print("{} {} N".format(token.text, gold_tag), file=test_file)
                         print("", file=test_file)
             return
         
@@ -892,8 +899,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Create logdir name  
-    logdir = "logs/{}-{}-{}".format(
-    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    #logdir = "logs/{}-{}-{}".format(
+    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -917,8 +924,8 @@ if __name__ == "__main__":
     
                                                                                                    
     tag_type = "ne"
-    fh = "/home/liefe/data/pt/ner/harem" # ner
-    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0
+    #fh = "/home/liefe/data/pt/ner/harem" # ner
+    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0
     cols = {0:"text", 1:"ne"}    
     
 
@@ -957,20 +964,20 @@ if __name__ == "__main__":
 
     embeddings = []
     if args.use_word_emb:
-        embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
-        #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
+        #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
+        embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         
     # Load Character Language Models (clms)
     
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache/pos"))
     if args.use_lm:
-        #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/fw_p25/best-lm.pt", use_cache=False))
-        #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/bw_p25/best-lm.pt", use_cache=False))
-        #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
-        #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
-        embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-        embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
+        embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
+        embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
+        #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache"))
+        #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/lief/files/embeddings/cache"))
+        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
     
     # Instantiate StackedEmbeddings
     print("Stacking embeddings")    
@@ -978,7 +985,9 @@ if __name__ == "__main__":
     
     # Construct the tagger
     print("Constructing tagger")
-    path = "/home/liefe/tag/logs/stc.py-2018-12-17_142437-af=0.5,bs=32,b=True,cd=16,cg=0.25,cf=64,cm=8,d=0,e=150,ebs=32,fl=0.001,l=1,ld=0.5,l=0.1,m=None,o=SGD,p=20,rc=LSTM,rd=512,tt=ne,uce=False,uc=True,ul=False,ul=False,upt=False,uwe=True,wd=0.05/best-model.ckpt"
+    #path = "/home/lief/logs/stc.py-2018-12-16_235702-af=0.5,bs=32,b=True,cd=16,cg=0.25,cf=64,cm=8,d=0,e=200,ebs=32,fl=0.001,l=1,ld=0.0,l=0.1,m=None,o=SGD,p=20,rc=LSTM,rd=256,tt=ne,uce=False,uc=True,ul=False,ul=True,upt=False,uwe=True,wd=0.0/best-model.ckpt                       
+    path = "/home/lief/logs/stc.py-2018-12-17_000547-af=0.5,bs=32,b=True,cd=16,cg=0.25,cf=64,cm=8,d=0,e=200,ebs=32,fl=0.001,l=1,ld=0.0,l=0.1,m=None,o=SGD,p=20,rc=LSTM,rd=256,tt=ne,uce=True,uc=True,ul=False,ul=True,upt=False,uwe=True,wd=0.0/best-model.ckpt"
+    
     tagger = SequenceTagger(args, corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
     #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, dropout=0, locked_dropout=.5, word_dropout=.05, use_lemmas=False, use_pos_tags=False)
     #tagger = SequenceTagger(args, corpus, stacked_embeddings, tag_type)
