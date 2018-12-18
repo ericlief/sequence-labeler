@@ -358,7 +358,7 @@ class SequenceTagger:
                 
                 #print("max sent len", max_sent_len)
                 max_sent_len = len(batch[0])                                    
-                while len(batch) > 1 and max_sent_len > 100:
+                while len(batch) > 1 and max_sent_len > 200:
                     #print("removing long sentence")
                     batch = batch[1:]
                     max_sent_len = len(batch[0])                    
@@ -540,14 +540,15 @@ class SequenceTagger:
             
             # Sort batch and get lengths
             batch.sort(key=lambda i: len(i), reverse=True)
-            
-            # Remove super long sentences                
             max_sent_len = len(batch[0])
-            #print("max sent len", max_sent_len)
-            while len(batch) > 1 and max_sent_len > 200:
-                #print("removing long sentence")
-                batch = batch[1:]
-                max_sent_len = len(batch[0])                    
+            
+            # Remove super long sentences                            
+            if dataset_name != "test":
+                #print("max sent len", max_sent_len)
+                while len(batch) > 1 and max_sent_len > 200:
+                    #print("removing long sentence")
+                    batch = batch[1:]
+                    max_sent_len = len(batch[0])                    
                 
             sent_lens = [len(s.tokens) for s in batch]
             n_sents = len(sent_lens)             
@@ -977,15 +978,15 @@ if __name__ == "__main__":
     
     # Construct the tagger
     print("Constructing tagger")
-    #path = "/home/liefe/tag/logs/mwe-150-16-16-20-pos/best-model.ckpt"
-    #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
+    path = "/home/liefe/tag/logs/stc.py-2018-12-17_142437-af=0.5,bs=32,b=True,cd=16,cg=0.25,cf=64,cm=8,d=0,e=150,ebs=32,fl=0.001,l=1,ld=0.5,l=0.1,m=None,o=SGD,p=20,rc=LSTM,rd=512,tt=ne,uce=False,uc=True,ul=False,ul=False,upt=False,uwe=True,wd=0.05/best-model.ckpt"
+    tagger = SequenceTagger(args, corpus, stacked_embeddings, tag_type, restore_model=True, model_path=path)
     #tagger = SequenceTagger(corpus, stacked_embeddings, tag_type, dropout=0, locked_dropout=.5, word_dropout=.05, use_lemmas=False, use_pos_tags=False)
-    tagger = SequenceTagger(args, corpus, stacked_embeddings, tag_type)
+    #tagger = SequenceTagger(args, corpus, stacked_embeddings, tag_type)
     
      
     # Train
-    print("Beginning training") 
-    tagger.train(args, checkpoint=True, embeddings_in_memory=True)   
+    #print("Beginning training") 
+    #tagger.train(args, checkpoint=True, embeddings_in_memory=True)   
      
     # Test 
     test_data = corpus.test
