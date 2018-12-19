@@ -78,7 +78,7 @@ class SequenceTagger:
             # Downsize pretrained CharLM + word embeddings
             if args.bn_input:
                 inputs = tf.layers.batch_normalization(self.embedded_sents, training=self.is_training, name="bn_input")
-            elif args_dropout_input:
+            elif args.dropout_input:
                 inputs= tf.nn.dropout(self.embedded_sents, 1 - args.dropout_input, name="dropout_input")
             inputs = tf.layers.dense(inputs, 256, name="charlm_input_layer")
             
@@ -191,16 +191,18 @@ class SequenceTagger:
                                                          dtype=tf.float32,
                                                          time_major=False)
            
-            ## Normalization
-            #if args.bn_output:
-                #outputs = tf.layers.batch_normalization(outputs, training=self.is_training, name="bn_output")
-           
-            #if args.dropout_output:
-                #outputs = tf.nn.dropout(outputs, 1 - args.dropout_output, name="dropout_output")
-                
+                            
             # Concatenate the outputs for fwd and bwd directions (in the third dimension).
             out_concat = tf.concat(outputs, axis=-1)
+            
+            # Normalization
+            if args.bn_output:
+                outputs = tf.layers.batch_normalization(out_concat, training=self.is_training, name="bn_output")
+           
+            if args.dropout_output:
+                outputs = tf.nn.dropout(out_concat, 1 - args.dropout_output, name="dropout_output")
 
+            
             # Add a dense layer (without activation) into num_tags classes 
             logits = tf.layers.dense(out_concat, n_tags) 
 
@@ -864,8 +866,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Create logdir name  
-    logdir = "logs/{}-{}-{}".format(
-    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    #logdir = "logs/{}-{}-{}".format(
+    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -889,8 +891,8 @@ if __name__ == "__main__":
     
                                                                                                    
     tag_type = "ne"
-    fh = "/home/liefe/data/pt/ner/harem" # ner
-    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0
+    #fh = "/home/liefe/data/pt/ner/harem" # ner
+    fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0
     cols = {0:"word", 1:"ne"}    
     
 
@@ -929,8 +931,8 @@ if __name__ == "__main__":
 
     embeddings = []
     if args.use_word_emb:
-        embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
-        #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
+        #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
+        embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         
     # Load Character Language Models (clms)
     
@@ -939,10 +941,10 @@ if __name__ == "__main__":
     if args.use_l_m:
         #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/fw_p25/best-lm.pt", use_cache=False))
         #embeddings.append(CharLMEmbeddings("/home/lief/files/language_models-backup/bw_p25/best-lm.pt", use_cache=False))
-        #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
-        #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
-        embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-        embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
+        embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
+        embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
+        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
     
     # Instantiate StackedEmbeddings
     print("Stacking embeddings")    
