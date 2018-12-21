@@ -90,18 +90,19 @@ class SequenceTagger:
                 self.lm_emb_dim = lm.embedding_length                
                 # Shape = (batch_size, max_sent_len, lm_emb_dim)
                 self.lm_emb = tf.placeholder(tf.float32, [None, None, self.lm_emb_dim], name="lm_emb")            
-                
+                                
                 # Downsize lm
+                lm_emb = self.lm_emb
                 if args.downsize_lm:
                     new_dim = args.downsize_lm * self.lm_emb_dim
                     if args.bn_input:
-                        lm_emb_norm = tf.layers.batch_normalization(self.lm_emb, training=self.is_training, name="bn_input")
+                        lm_emb = tf.layers.batch_normalization(lm_emb, training=self.is_training, name="bn_input")
                     elif args.dropout_input:
-                        lm_emb_norm = tf.nn.dropout(self.lm_emb, 1 - args.dropout_input, name="dropout_input")
-                    lm_emb_reduced = tf.layers.dense(lm_emb_norm, new_dim, name="charlm_input_layer")
+                        lm_emb = tf.nn.dropout(lm_emb, 1 - args.dropout_input, name="dropout_input")
+                    lm_emb_reduced = tf.layers.dense(lm_emb, new_dim, name="charlm_input_layer")
                     inputs.append(lm_emb_reduced)
                 else:
-                    inputs.append(self.lm_emb)
+                    inputs.append(lm_emb)
                      
             if args.use_word_emb:
                 #self.word_emb = word_emb
@@ -119,8 +120,8 @@ class SequenceTagger:
                 n_words = len(self.word_dict)
                 self.word_embedding = tf.get_variable("word_embedding", [n_words, args.rnn_dim], tf.float32)
                 # Shape = (batch_size, max_sent_len, rnn_dim)                
-                self.embedded_words = tf.nn.embedding_lookup(self.word_embedding, self.word_ids)
-                inputs.append(self.embedded_words)
+                embedded_words = tf.nn.embedding_lookup(self.word_embedding, self.word_ids)
+                inputs.append(embedded_words)
                 #inputs = tf.concat([inputs, embedded_words], axis=2)
             
             if args.use_lemmas:
@@ -128,9 +129,9 @@ class SequenceTagger:
                 self.lemma_ids = tf.placeholder(tf.int32, [None, None], name="lemmas")
                 self.lemma_dict = corpus.make_tag_dictionary("lemma")  # id to tag
                 n_lemmas = len(self.lemma_dict)
-                lemma_embedding = tf.get_variable("lemma_embedding", [n_lemmas, args.rnn_dim], tf.float32)
+                self.lemma_embedding = tf.get_variable("lemma_embedding", [n_lemmas, args.rnn_dim], tf.float32)
                 # Shape = (batch_size, max_sent_len, rnn_dim)                
-                embedded_lemmas = tf.nn.embedding_lookup(lemma_embedding, self.lemma_ids)
+                embedded_lemmas = tf.nn.embedding_lookup(self.lemma_embedding, self.lemma_ids)
                 inputs.append(embedded_lemmas)
                 #inputs = tf.concat([inputs, embedded_lemmas], axis=2)
             
@@ -139,9 +140,9 @@ class SequenceTagger:
                 self.pos_tags = tf.placeholder(tf.int32, [None, None], name="tags")
                 self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag                
                 n_pos_tags = len(self.pos_tag_dict)
-                pos_tag_embedding = tf.get_variable("tag_embedding", [n_pos_tags, args.rnn_dim], tf.float32)
+                self.pos_tag_embedding = tf.get_variable("tag_embedding", [n_pos_tags, args.rnn_dim], tf.float32)
                 # Shape = (batch_size, max_sent_len, rnn_dim)                
-                embedded_pos_tags = tf.nn.embedding_lookup(pos_tag_embedding, self.pos_tag_ids)
+                embedded_pos_tags = tf.nn.embedding_lookup(self.pos_tag_embedding, self.pos_tag_ids)
                 #inputs = tf.concat([inputs, embedded_pos_tags], axis=2)            
                 inputs.append(embedded_pos_tags)
                 
@@ -167,7 +168,7 @@ class SequenceTagger:
                     self.char_embeddings = tf.get_variable('char_embeddings', [num_chars, args.cle_dim])
                     
                     # Embed self.chaseqs (list of unique words in the batch) using the character embeddings.
-                    self.embedded_chars = tf.nn.embedding_lookup(self.char_embeddings, self.char_seqs)
+                    embedded_chars = tf.nn.embedding_lookup(self.char_embeddings, self.char_seqs)
                     
                     # TODO: Use `tf.nn.bidirectional_dynamic_rnn` to process embedded self.charseqs using
                     # a GRU cell of dimensionality `args.cle_dim`.
@@ -175,29 +176,30 @@ class SequenceTagger:
                     cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(args.rnn_dim)
                     
                     # Dropout wrapper?
-                    #cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
-                    #cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
-                    
+                    if args.locked_dropout:
+                        cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
+                        cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
+                        
                     if args.bn_char:
-                        embedded_chars = tf.layers.batch_normalization(self.embedded_chars, training=self.is_training, name="bn_char")
+                        embedded_chars = tf.layers.batch_normalization(embedded_chars, training=self.is_training, name="bn_char")
                     if args.dropout_char:
                         embedded_chars = tf.nn.dropout(embedded_chars, 1 - args.dropout_char, name="dropout_char") 
                         
                     # Run cell in limited scope fw and bw
                     # in order to encode char information (subword factors)
                     # The cell is size of char dim, e.g. 32 -> output (?,32)
-                    outputs, states = tf.nn.bidirectional_dynamic_rnn(cell_fw, 
-                                                                      cell_bw, 
-                                                                      inputs=embedded_chars, 
-                                                                      sequence_length=self.char_seq_lens, 
-                                                                      dtype=tf.float32)
+                    _, states = tf.nn.bidirectional_dynamic_rnn(cell_fw, 
+                                                                cell_bw, 
+                                                                inputs=embedded_chars, 
+                                                                sequence_length=self.char_seq_lens, 
+                                                                dtype=tf.float32)
                     
                     # Sum the resulting fwd and bwd state to generate character-level word embedding (CLE)
                     # of unique words in the batch                   
                     cle = tf.reduce_sum(states, axis=0) 
                     # Shape = (batch_size, max_sent_len, cle_dim)                                    
-                    emb = tf.nn.embedding_lookup(cle, self.char_seq_ids)
-                    inputs.append(emb)
+                    embedded_char_seqs = tf.nn.embedding_lookup(cle, self.char_seq_ids)
+                    inputs.append(embedded_char_seqs)
             
             # Concatenate all embeddings
             if len(inputs) > 1:
@@ -211,7 +213,7 @@ class SequenceTagger:
             if args.bn_sent:
                 inputs_concat = tf.layers.batch_normalization(inputs_concat, training=self.is_training, name="bn_sent")
             elif args.dropout_sent:
-                inputs = tf.nn.dropout(inputs_concat, 1 - args.dropout_sent, name="dropout_sent")
+                inputs_concat = tf.nn.dropout(inputs_concat, 1 - args.dropout_sent, name="dropout_sent")
             
             # Apply word dropout
             if args.word_dropout:
@@ -229,9 +231,10 @@ class SequenceTagger:
             else: 
                 raise Exception("Must select an rnn cell type")     
 
-            ## Add locked/variational dropout wrapper
-            #cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
-            #cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
+            # Add locked/variational dropout wrapper
+            if args.locked_dropout:
+                cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
+                cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
 
             # Process embedded inputs with rnn cell
             outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw, 
@@ -252,6 +255,12 @@ class SequenceTagger:
             if args.dropout_output:
                 outputs_concat = tf.nn.dropout(outputs_concat, 1 - args.dropout_output, name="dropout_output")
 
+            
+            
+            ## Add a dense layer (without activation)  
+            #outputs_concat = tf.layers.dense(outputs_concat, args.rnn_dim, activation=tf.tanh)             
+            
+            
             
             # Add a dense layer (without activation) into num_tags classes 
             logits = tf.layers.dense(outputs_concat, n_tags) 
