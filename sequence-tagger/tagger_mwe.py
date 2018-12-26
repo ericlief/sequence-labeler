@@ -326,7 +326,7 @@ class SequenceTagger:
                 #self.training = optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
                 
             # Summaries
-            self.current_accuracy, self.update_accuracy = tf.metrics.accuracy(self.gold_tags, self.predictions, weights=weights)
+            #self.current_accuracy, self.update_accuracy = tf.metrics.accuracy(self.gold_tags, self.predictions, weights=weights)
             self.current_loss, self.update_loss = tf.metrics.mean(self.loss, weights=tf.reduce_sum(weights))
             self.reset_metrics = tf.variables_initializer(tf.get_collection(tf.GraphKeys.METRIC_VARIABLES))
 
@@ -335,13 +335,23 @@ class SequenceTagger:
             with summary_writer.as_default(), tf.contrib.summary.record_summaries_every_n_global_steps(10):
                 self.summaries["train"] = [tf.contrib.summary.scalar("train/loss", self.update_loss),
                                            tf.contrib.summary.scalar("train/gradient_norm", gradient_norm),
-                                           tf.contrib.summary.scalar("train/accuracy", self.update_accuracy)]
+                                           #tf.contrib.summary.scalar("train/accuracy", self.update_accuracy)]
+                                           tf.contrib.summary.scalar("train/accuracy", self.metrics.accuracy),
+                                           tf.contrib.summary.scalar("train/precision", self.metrics.precision),
+                                           tf.contrib.summary.scalar("train/recall", self.metrics.recall),
+                                           tf.contrib.summary.scalar("train/f1", self.metrics.f1)]
+                                           
+                                           
+                
 
             with summary_writer.as_default(), tf.contrib.summary.always_record_summaries():
                 for dataset in ["dev", "test"]:
                     self.summaries[dataset] = [tf.contrib.summary.scalar(dataset + "/loss", self.current_loss),
-                                               tf.contrib.summary.scalar(dataset + "/accuracy", self.current_accuracy)]
-                                               
+                                               #tf.contrib.summary.scalar(dataset + "/accuracy", self.current_accuracy)]
+                                               tf.contrib.summary.scalar(dataset + "/accuracy", self.metrics.accuracy),
+                                               tf.contrib.summary.scalar(dataset + "/precision", self.metrics.precision),
+                                               tf.contrib.summary.scalar(dataset + "/recall", self.metrics.recall),
+                                               tf.contrib.summary.scalar(dataset + "/f1", self.metrics.f1)]                                               
             # To save model
             self.saver = tf.train.Saver()
             
@@ -559,7 +569,7 @@ class SequenceTagger:
                             totals_per_tag[tag]['tn'] += 1 # tn?
                  
                 #self.metrics.log_metrics("train", totals, totals_per_tag, epoch, batch_n)                
-                self.metrics.log_metrics("train", totals, totals_per_tag, epoch, batch_n, self.scheduler.lr, self.scheduler.bad_epochs, dev_score)                
+                #self.metrics.log_metrics("train", totals, totals_per_tag, epoch, batch_n, self.scheduler.lr, self.scheduler.bad_epochs, dev_score)                
                 
                 if not embeddings_in_memory:
                     self.clear_embeddings_in_batch(batch)                
@@ -569,6 +579,9 @@ class SequenceTagger:
                 save_path = self.saver.save(self.session, "{}/checkpoint.ckpt".format(logdir))
                 print("Checkpoint saved at ", save_path)
            
+            # Save metrics for epoch
+            self.metrics.log_metrics("train", totals, totals_per_tag, epoch, batch_n, self.scheduler.lr, self.scheduler.bad_epochs, dev_score)                
+                    
             # Evaluate with dev data
             dev_data = corpus.dev                
             #dev_score = self.evaluate("dev", dev_data, dev_batch_size, epoch, embeddings_in_memory=embeddings_in_memory)
@@ -610,18 +623,23 @@ class SequenceTagger:
         for batch_n, batch in enumerate(batches):
                         
             # Sort batch and get lengths
-            batch.sort(key=lambda i: len(i), reverse=True)
-            max_sent_len = len(batch[0])
+            #batch.sort(key=lambda i: len(i), reverse=True)
             
-            # Remove super long sentences                            
-            #if dataset_name != "test":
-                #print("max sent len", max_sent_len)
-            while len(batch) > 1 and max_sent_len > 200:
-                #print("removing long sentence")
-                batch = batch[1:]
-                max_sent_len = len(batch[0])                    
+            #max_sent_len = len(batch[0])
+            #max_sent_len = max(batch, key=len(x))
+            
+            
+            ## Remove super long sentences                            
+            ##if dataset_name != "test":
+                ##print("max sent len", max_sent_len)
+            #while len(batch) > 1 and max_sent_len > 200:
+                ##print("removing long sentence")
+                #batch = batch[1:]
+                #max_sent_len = len(batch[0])                    
                 
             sent_lens = [len(s.tokens) for s in batch]
+            max_sent_len = max(sent_lens)                  
+            
             n_sents = len(sent_lens)             
             
             # Prepare embeddings, pad and embed sentences and tags
@@ -728,17 +746,22 @@ class SequenceTagger:
             # For dev data
             if not test_mode:
                 feed_dict[self.gold_tags] = gold_tags
-                _, _, dev_loss, predicted_tag_ids =  self.session.run([self.update_accuracy, 
+                #_, _, dev_loss, predicted_tag_ids =  self.session.run([self.update_accuracy, 
+                                                                       #self.update_loss, 
+                                                                       #self.current_loss, 
+                                                                       #self.predictions],
+                                                                      #feed_dict)   
+                
+                _, _, dev_loss, predicted_tag_ids =  self.session.run([self.summaries["dev"], 
                                                                        self.update_loss, 
                                                                        self.current_loss, 
                                                                        self.predictions],
-                                                                      feed_dict)   
-             
+                                                                      feed_dict)                
                 print("dev loss ", dev_loss)
             
             # For test data
             else:
-                predicted_tag_ids = self.session.run(self.predictions,
+                _, predicted_tag_ids = self.session.run([self.summaries["test"], self.predictions],
                                                      feed_dict)                
                                        
             # Add predicted tag to each token (annotate)    
@@ -768,31 +791,110 @@ class SequenceTagger:
                         totals['tn'] +=1
                         totals_per_tag[tag]['tn'] += 1 # tn?
              
-            self.metrics.log_metrics(dataset_name, totals, totals_per_tag, epoch, batch_n, self.scheduler.lr, self.scheduler.bad_epochs)
+            #self.metrics.log_metrics(dataset_name, totals, totals_per_tag, epoch, batch_n, self.scheduler.lr, self.scheduler.bad_epochs)
 
             
             if not embeddings_in_memory:
                 self.clear_embeddings_in_batch(batch)             
+        
+        # Log dev metrics
+        #self.metrics.log_metrics(dataset_name, totals, totals_per_tag, epoch, batch_n, self.scheduler.lr, self.scheduler.bad_epochs)
+        
                         
+        ## Write test results
+        #if test_mode:                
+            #with open("{}/tagger_tag_test.txt".format(logdir), "w") as test_file:
+                #for i in range(len(batches)):
+                    #for j in range(len(batches[i])): 
+                        #for k in range(len(batches[i][j])):
+                            #token = batches[i][j][k]
+                            #gold_tag = token.get_tag(self.tag_type).value
+                            #predicted_tag = token.get_tag('predicted').value
+                            #if predicted_tag != '':
+                                #print("{} {} {}".format(token.text, gold_tag, predicted_tag), file=test_file)
+                            #else:
+                                ##print('null tag')
+                                #if self.tag_type == "ne" or self.tag_type == "mwe":
+                                    #print("{} {} O".format(token.text, gold_tag), file=test_file)
+                                #elif self.tag_type == "pos":
+                                    #print("{} {} N".format(token.text, gold_tag), file=test_file)
+                        #print("", file=test_file)
+            #return
+        
         # Write test results
         if test_mode:                
             with open("{}/tagger_tag_test.txt".format(logdir), "w") as test_file:
+                print("# global.columns = ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC PARSEME:MWE", file=test_file)
                 for i in range(len(batches)):
                     for j in range(len(batches[i])): 
+                        
+                        # Convert tags back to cupti format
+                        sent_spans = [(idx, span.tokens) for idx, span in enumerate(batches[i][j].get_spans("predicted"), 1)]
+                        #print(sent_spans)
+                        for idx, tokens in sent_spans:
+                            first_t = tokens[0]
+                            print(first_t.text)
+                            old_tag = first_t.get_tag("predicted").value
+                            #print("old", old_tag)
+                            new_tag = str(idx) + ":" + old_tag[2:]
+                            #print("new", new_tag)
+                            first_t.add_tag("predicted", new_tag)                                 
+                            for token in tokens[1:]:
+                                token.add_tag("predicted", str(idx))                   
+                        
+                        print("# text = ", end="", file=test_file)                         
+                        for k in range(len(batches[i][j])):
+                            
+                            # Print sent 
+                            token = batches[i][j][k]
+                            print(token.text, end=" ", file=test_file)
+                        print("", file=test_file)
+                        
                         for k in range(len(batches[i][j])):
                             token = batches[i][j][k]
-                            gold_tag = token.get_tag(self.tag_type).value
-                            predicted_tag = token.get_tag('predicted').value
+                            #gold_tag = token.get_tag(self.tag_type).value
+                            #predicted_tag = token.get_tag('predicted').value
                             if predicted_tag != '':
-                                print("{} {} {}".format(token.text, gold_tag, predicted_tag), file=test_file)
+                                print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(token.get_tag("idx").value,
+                                                                                          token.text, 
+                                                                                          token.get_tag("lemma").value,
+                                                                                          token.get_tag("upos").value,
+                                                                                          token.get_tag("xpos").value,
+                                                                                          token.get_tag("features").value,
+                                                                                          token.get_tag("parent").value,
+                                                                                          token.get_tag("deprel").value, 
+                                                                                          token.get_tag("deps").value,
+                                                                                          token.get_tag("misc").value,
+                                                                                          token.get_tag("predicted").value),
+                                      file=test_file)
                             else:
                                 #print('null tag')
-                                if self.tag_type == "ne" or self.tag_type == "mwe":
-                                    print("{} {} O".format(token.text, gold_tag), file=test_file)
+                                if self.tag_type == "mwe":
+                                    print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(token.get_tag("idx").value,
+                                                                                              token.text, 
+                                                                                              token.get_tag("lemma").value,
+                                                                                              token.get_tag("upos").value,
+                                                                                              token.get_tag("xpos").value,
+                                                                                              token.get_tag("features").value,
+                                                                                              token.get_tag("parent").value,
+                                                                                              token.get_tag("deprel").value, 
+                                                                                              token.get_tag("deps").value,
+                                                                                              token.get_tag("misc").value,
+                                                                                              token.get_tag("predicted").value),
+                                          file=test_file)                             
+                                elif self.tag_type == "ne":
+                                        print("{} {} O".format(token.text, gold_tag), file=test_file)                                
                                 elif self.tag_type == "pos":
                                     print("{} {} N".format(token.text, gold_tag), file=test_file)
                         print("", file=test_file)
-            return
+            return        
+        
+        
+        
+        #cols = {0:"idx", 1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 8:"deps", 9:"misc", 10:"mwe"}
+        
+        
+        
         
         # Save and print metrics                  
         #self.metrics.log_metrics(dataset_name, totals, totals_per_tag, batch_n)
@@ -834,6 +936,11 @@ class SequenceTagger:
                
 class Metrics:
     """Helper class to calculate and store metrics"""
+    
+    def __init__(self):
+        
+        self.accuracy = self.precision = self.recall = self.f1 = 0
+    
     
     def log_metrics(self, dataset_name, totals, totals_per_tag, epoch, batch_n, lr=0, bad_epochs=0, dev_score=0):
         
@@ -970,6 +1077,7 @@ if __name__ == "__main__":
     import argparse
     import datetime
     import os
+    import sys
     import re
     from flair.data_fetcher import NLPTaskDataFetcher
     from flair.embeddings import CharLMEmbeddings, WordEmbeddings, StackedEmbeddings
@@ -1021,8 +1129,8 @@ if __name__ == "__main__":
     filename = os.path.basename(__file__)
     
     # Create logdir name  
-    #logdir = "logs/{}-{}-{}".format(
-    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    logdir = "logs/{}-{}-{}".format(
+    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         filename,
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -1060,10 +1168,14 @@ if __name__ == "__main__":
 
 
     tag_type = "mwe"
-    #fh = "/home/liefe/data/pt/mwe"
-    fh = "/home/lief/files/data/pt/mwe" 
-    #cols = {1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 10:"mwe"}
-    cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
+    
+    #fh = "/home/liefe/data/pt/mwe/"
+    
+    fh = "/home/liefe/data/pt/mwe"
+    
+    #fh = "/home/lief/files/data/pt/mwe" 
+    cols = {0:"idx", 1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 8:"deps", 9:"misc", 10:"mwe"}
+    #cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
     
     # Fetch corpus
     print("Getting corpus")
@@ -1072,6 +1184,13 @@ if __name__ == "__main__":
                                                     train_file="train.txt",
                                                     dev_file="dev.txt", 
                                                     test_file="test.txt")
+    
+    #for s in corpus.test[:10]:
+        #for t in s:
+            #print(t.get_tag("idx").value, end="")
+        #print()
+    #sys.exit()
+    
     
                 
     #word_dict = corpus.make_tag_dictionary("text")  # id to tag
@@ -1100,8 +1219,8 @@ if __name__ == "__main__":
         #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
         #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         #word_emb = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
-        #word_emb = KeyedVectors.load('/home/liefe/.flair/embeddings/cc.pt.300.kv')
-        word_emb = KeyedVectors.load("/home/lief/files/embeddings/cc.pt.300.kv")
+        word_emb = KeyedVectors.load('/home/liefe/.flair/embeddings/cc.pt.300.kv')
+        #word_emb = KeyedVectors.load("/home/lief/files/embeddings/cc.pt.300.kv")
     
     else:
         word_emb = None
@@ -1117,10 +1236,10 @@ if __name__ == "__main__":
         #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
         #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
         #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-        #fw_lm = CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")
-        #bw_lm = CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")       
-        fw_lm = CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt")
-        bw_lm = CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt")
+        fw_lm = CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")
+        bw_lm = CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")       
+        #fw_lm = CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt")
+        #bw_lm = CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt")
 
         # Stack lm embeddings
         lm = StackedEmbeddings([fw_lm, bw_lm])
