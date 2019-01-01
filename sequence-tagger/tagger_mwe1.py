@@ -209,32 +209,51 @@ class SequenceTagger:
                     #   and `args.cnne_filters`; use `VALID` padding, stride 1 and no activation.
                     # - perform channel-wise max-pooling over the whole word, generating output
                     #   of size `args.cnne_filters` for every word.
-                    # features = []
-                    # for kernel_size in range(2, args.cnne_max + 1):
-                    #     conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
-                    #     print(conv)
-                    #     # Apply batch norm
-                    #     if args.bn_char:
-                    #         conv = tf.layers.batch_normalization(conv, training=self.is_training, name='bn_cnn'+str(kernel_size))
-                    #     if args.dropout_char:
-                    #         conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
-                    #     pooling = tf.reduce_max(conv, axis=1)
-
-                        
-                    #     features.append(pooling)
                     features = []
                     for kernel_size in range(2, args.cnne_max + 1):
-                        
-                        conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=tf.nn.relu, use_bias=False, name='cnne_layer_'+str(kernel_size))
-                        pooling = tf.reduce_max(conv, axis=1)
-                        
+                        conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                        #print(conv)
                         # Apply batch norm
                         if args.bn_char:
                             conv = tf.layers.batch_normalization(conv, training=self.is_training, name='bn_cnn'+str(kernel_size))
                         if args.dropout_char:
                             conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
+                        pooling = tf.reduce_max(conv, axis=1)
+                        features.append(pooling)
+
+                    # # 2
+                    # features = []
+                    # for kernel_size in range(2, args.cnne_max + 1):
                         
-                        features.append(pooling)              
+                    #     conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=tf.nn.relu, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                    #     conv = tf.reduce_max(conv, axis=1)
+                        
+                    #     # Apply batch norm
+                    #     if args.bn_char:
+                    #         conv = tf.layers.batch_normalization(conv, training=self.is_training, name='bn_cnn'+str(kernel_size))
+                    #     if args.dropout_char:
+                    #         conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
+            
+                    #     features.append(conv)              
+
+
+                    # 3
+                    # features = []
+                    # for kernel_size in range(2, args.cnne_max + 1):
+                        
+                    #     conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                        
+                    #     # Apply batch norm
+                    #     if args.bn_char:
+                    #         conv = tf.layers.batch_normalization(conv, training=self.is_training, name='bn_cnn'+str(kernel_size))
+                    #     if args.dropout_char:
+                    #         conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
+                        
+                    #     pooling = tf.nn.relu(conv)
+                    #     pooling = tf.reduce_max(conv, axis=1)                        
+                    #     features.append(pooling)       
+
+
 
                     # Concatenate the computed features (in the order of kernel sizes 2..args.cnne_max).
                     # Consequently, each word from `self.charseqs` is represented using convolutional embedding
@@ -247,8 +266,7 @@ class SequenceTagger:
                     #inputs = tf.concat([inputs, cnne], axis=-1)                          
                     
                     inputs.append(cnne)
-                    
-                    
+                                        
                     
                     
             # Concatenate all embeddings
@@ -1135,7 +1153,6 @@ if __name__ == "__main__":
     parser.add_argument("--eval_batch_size", default=32, type=int, help="Batch size for dev.")
     parser.add_argument("--rnn_cell", default="LSTM", type=str, help="RNN cell type.")
     parser.add_argument("--rnn_dim", default=256, type=int, help="RNN cell dimension.")    
-    parser.add_argument("--char_emb_dim", default=256, type=int, help="Char RNN cell dimension.")
     parser.add_argument("--cnne_filters", default=200, type=int, help="# cnn filters")
     parser.add_argument("--cnne_max", default=3, type=int, help="Max filter size - 1")    
     parser.add_argument("--optimizer", default="SGD", type=str, help="Optimizer.")    
@@ -1171,8 +1188,8 @@ if __name__ == "__main__":
     filename = os.path.basename(__file__)
     
     # Create logdir name  
-    logdir = "logs/{}-{}-{}".format(
-    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    #logdir = "logs/{}-{}-{}".format(
+    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         filename,
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -1211,8 +1228,9 @@ if __name__ == "__main__":
 
     tag_type = "mwe"
     #fh = "/home/liefe/data/pt/mwe/"    # parseme 1.1 
-    fh = "/home/liefe/data/pt/mwe/mwe10" # parseme 1.0
-    #fh = "/home/lief/files/data/pt/mwe" 
+    #fh = "/home/liefe/data/pt/mwe/mwe10" # parseme 1.0
+    fh = "/home/lief/files/data/pt/mwe/mwe10" # parseme 1.0
+    
     cols = {0:"idx", 1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 8:"deps", 9:"misc", 10:"mwe"}
     #cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
     
@@ -1258,8 +1276,8 @@ if __name__ == "__main__":
         #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
         #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         #word_emb = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
-        word_emb = KeyedVectors.load('/home/liefe/.flair/embeddings/cc.pt.300.kv')
-        #word_emb = KeyedVectors.load("/home/lief/files/embeddings/cc.pt.300.kv")
+        #word_emb = KeyedVectors.load('/home/liefe/.flair/embeddings/cc.pt.300.kv')
+        word_emb = KeyedVectors.load("/home/lief/files/embeddings/cc.pt.300.kv")
     
     else:
         word_emb = None
@@ -1275,10 +1293,10 @@ if __name__ == "__main__":
         #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
         #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
         #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-        fw_lm = CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")
-        bw_lm = CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")       
-        #fw_lm = CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt")
-        #bw_lm = CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt")
+        #fw_lm = CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")
+        #bw_lm = CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")       
+        fw_lm = CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt")
+        bw_lm = CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt")
 
         # Stack lm embeddings
         lm = StackedEmbeddings([fw_lm, bw_lm])
