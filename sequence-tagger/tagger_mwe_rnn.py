@@ -801,30 +801,10 @@ class SequenceTagger:
         self.metrics.log_metrics(dataset_name, totals, totals_per_tag, epoch, batch_n, self.scheduler.lr, self.scheduler.bad_epochs)
         
                         
-        ## Write test results
-        #if test_mode:                
-            #with open("{}/tagger_tag_test.txt".format(logdir), "w") as test_file:
-                #for i in range(len(batches)):
-                    #for j in range(len(batches[i])): 
-                        #for k in range(len(batches[i][j])):
-                            #token = batches[i][j][k]
-                            #gold_tag = token.get_tag(self.tag_type).value
-                            #predicted_tag = token.get_tag('predicted').value
-                            #if predicted_tag != '':
-                                #print("{} {} {}".format(token.text, gold_tag, predicted_tag), file=test_file)
-                            #else:
-                                ##print('null tag')
-                                #if self.tag_type == "ne" or self.tag_type == "mwe":
-                                    #print("{} {} O".format(token.text, gold_tag), file=test_file)
-                                #elif self.tag_type == "pos":
-                                    #print("{} {} N".format(token.text, gold_tag), file=test_file)
-                        #print("", file=test_file)
-            #return
-        
-        # Write test results
+         # Write test results
         if test_mode:                
             with open("{}/tagger_tag_test.txt".format(logdir), "w") as test_file:
-                print("# global.columns = ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC PARSEME:MWE", file=test_file)
+                print("# global.columns = ID FORM NO_SPACE PARSEME:MWE", file=test_file)
                 for i in range(len(batches)):
                     for j in range(len(batches[i])): 
                         
@@ -833,7 +813,7 @@ class SequenceTagger:
                         #print(sent_spans)
                         for idx, tokens in sent_spans:
                             first_t = tokens[0]
-                            print(first_t.text)
+                            #print(first_t.text)
                             old_tag = first_t.get_tag("predicted").value
                             #print("old", old_tag)
                             new_tag = str(idx) + ":" + old_tag[2:]
@@ -841,54 +821,33 @@ class SequenceTagger:
                             first_t.add_tag("predicted", new_tag)                                 
                             for token in tokens[1:]:
                                 token.add_tag("predicted", str(idx))                   
-                        
-                        print("# text = ", end="", file=test_file)                         
-                        for k in range(len(batches[i][j])):
-                            
-                            # Print sent 
-                            token = batches[i][j][k]
-                            print(token.text, end=" ", file=test_file)
-                        print("", file=test_file)
+                      
                         
                         for k in range(len(batches[i][j])):
                             token = batches[i][j][k]
                             #gold_tag = token.get_tag(self.tag_type).value
                             #predicted_tag = token.get_tag('predicted').value
                             if predicted_tag != '':
-                                print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(token.get_tag("idx").value,
-                                                                                          token.text, 
-                                                                                          token.get_tag("lemma").value,
-                                                                                          token.get_tag("upos").value,
-                                                                                          token.get_tag("xpos").value,
-                                                                                          token.get_tag("features").value,
-                                                                                          token.get_tag("parent").value,
-                                                                                          token.get_tag("deprel").value, 
-                                                                                          token.get_tag("deps").value,
-                                                                                          token.get_tag("misc").value,
-                                                                                          token.get_tag("predicted").value),
+                                print("{}\t{}\t_\t{}".format(token.get_tag("idx").value,
+                                                             token.text, 
+                                                             token.get_tag("predicted").value),
                                       file=test_file)
+                                
+                                #print(token.get_tag("predicted").value)
+                                
                             else:
-                                #print('null tag')
+                                print('null tag')
                                 if self.tag_type == "mwe":
-                                    print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(token.get_tag("idx").value,
-                                                                                              token.text, 
-                                                                                              token.get_tag("lemma").value,
-                                                                                              token.get_tag("upos").value,
-                                                                                              token.get_tag("xpos").value,
-                                                                                              token.get_tag("features").value,
-                                                                                              token.get_tag("parent").value,
-                                                                                              token.get_tag("deprel").value, 
-                                                                                              token.get_tag("deps").value,
-                                                                                              token.get_tag("misc").value,
-                                                                                              token.get_tag("predicted").value),
-                                          file=test_file)                             
+                                    print("{}\t{}\t_\t_".format(token.get_tag("idx").value,
+                                                                 token.text),
+                                      file=test_file)
                                 elif self.tag_type == "ne":
                                         print("{} {} O".format(token.text, gold_tag), file=test_file)                                
                                 elif self.tag_type == "pos":
                                     print("{} {} N".format(token.text, gold_tag), file=test_file)
                         print("", file=test_file)
             return        
-        
+                
         
         
         #cols = {0:"idx", 1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 8:"deps", 9:"misc", 10:"mwe"}

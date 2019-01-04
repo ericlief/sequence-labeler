@@ -218,14 +218,28 @@ class SequenceTagger:
                     #     if args.dropout_char:
                     #         conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
                     #     pooling = tf.reduce_max(conv, axis=1)
-
-                        
                     #     features.append(pooling)
+
+                    # features = []
+                    # for kernel_size in range(2, args.cnne_max + 1):
+                        
+                    #     conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                    #     pooling = tf.reduce_max(conv, axis=1)
+                        
+                    #     # Apply batch norm
+                    #     if args.bn_char:
+                    #         conv = tf.layers.batch_normalization(conv, training=self.is_training, name='bn_cnn'+str(kernel_size))
+                    #     if args.dropout_char:
+                    #         conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
+                        
+                    #     pooling = tf.nn.relu(pooling)
+                    #     features.append(pooling)              
+
+                                        #     features.append(pooling)
                     features = []
                     for kernel_size in range(2, args.cnne_max + 1):
                         
-                        conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=tf.nn.relu, use_bias=False, name='cnne_layer_'+str(kernel_size))
-                        pooling = tf.reduce_max(conv, axis=1)
+                        conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
                         
                         # Apply batch norm
                         if args.bn_char:
@@ -233,8 +247,16 @@ class SequenceTagger:
                         if args.dropout_char:
                             conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
                         
-                        features.append(pooling)              
+                        pooling = tf.nn.relu(conv)
+                        pooling = tf.reduce_max(conv, axis=1)                        
+                        features.append(pooling)       
 
+
+
+
+
+
+                    
                     # Concatenate the computed features (in the order of kernel sizes 2..args.cnne_max).
                     # Consequently, each word from `self.charseqs` is represented using convolutional embedding
                     # (CNNE) of size `(args.cnne_max-1)*args.cnne_filters`.                
@@ -1148,7 +1170,6 @@ if __name__ == "__main__":
     parser.add_argument("--eval_batch_size", default=32, type=int, help="Batch size for dev.")
     parser.add_argument("--rnn_cell", default="LSTM", type=str, help="RNN cell type.")
     parser.add_argument("--rnn_dim", default=256, type=int, help="RNN cell dimension.")    
-    parser.add_argument("--char_emb_dim", default=256, type=int, help="Char RNN cell dimension.")
     parser.add_argument("--cnne_filters", default=200, type=int, help="# cnn filters")
     parser.add_argument("--cnne_max", default=3, type=int, help="Max filter size - 1")    
     parser.add_argument("--optimizer", default="SGD", type=str, help="Optimizer.")    

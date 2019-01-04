@@ -55,11 +55,12 @@ class SequenceTagger:
         #print(corpus.train[0][0].text)
         
         # Make dictionary for pos tags and lemmas if desired
-        #if args.use_pos_tags:
-            #self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag
-        #if args.use_lemmas:
-            #self.lemma_dict = corpus.make_tag_dictionary("lemma")  # id to tag
-                     
+        
+        if args.use_lemmas:
+            self.lemma_dict = corpus.make_tag_dictionary("lemma")  # id to tag
+        if args.use_pos_tags:
+            self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag
+            
         #print(tag_type, self.tag_dict.idx2item)
         #print(corpus.train)
         
@@ -128,7 +129,7 @@ class SequenceTagger:
             if args.use_lemmas:
                 # Shape = (batch_size, max_sent_len)                
                 self.lemma_ids = tf.placeholder(tf.int32, [None, None], name="lemmas")
-                self.lemma_dict = corpus.make_tag_dictionary("lemma")  # id to tag
+                #self.lemma_dict = corpus.make_tag_dictionary("lemma")  # id to tag
                 n_lemmas = len(self.lemma_dict)
                 self.lemma_embedding = tf.get_variable("lemma_embedding", [n_lemmas, args.rnn_dim], tf.float32)
                 # Shape = (batch_size, max_sent_len, rnn_dim)                
@@ -139,7 +140,7 @@ class SequenceTagger:
             if args.use_pos_tags:
                 # Shape = (batch_size, max_sent_len)                
                 self.pos_tag_ids = tf.placeholder(tf.int32, [None, None], name="tags")
-                self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag                
+                #self.pos_tag_dict = corpus.make_tag_dictionary("upos")  # id to tag                
                 n_pos_tags = len(self.pos_tag_dict)
                 self.pos_tag_embedding = tf.get_variable("tag_embedding", [n_pos_tags, args.rnn_dim], tf.float32)
                 # Shape = (batch_size, max_sent_len, rnn_dim)                

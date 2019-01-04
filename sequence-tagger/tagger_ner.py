@@ -1020,8 +1020,8 @@ if __name__ == "__main__":
     print(args)
     
     # Create logdir name  
-    logdir = "logs/{}-{}-{}".format(
-    #logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
+    #logdir = "logs/{}-{}-{}".format(
+    logdir = "/home/lief/files/tagger/logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
         ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
@@ -1045,10 +1045,10 @@ if __name__ == "__main__":
     
                                                                                                    
     tag_type = "ne"
-    fh = "/home/liefe/data/pt/ner/harem" # ner
-    #fh = "/home/liefe/data/pt/ner/harem/test" # ner
-    
-    #fh = "/home/lief/files/data/pt/ner/harem" # ner                                                                                       0
+    #fh = "/home/liefe/data/pt/ner/harem" 
+    #fh = "/home/liefe/data/pt/ner/harem/test" 
+    #fh = "/home/lief/files/data/pt/ner/harem/select"   
+    fh = "/home/lief/files/data/pt/ner/harem" 
     cols = {0:"text", 1:"ne"}    
     
 
@@ -1095,7 +1095,8 @@ if __name__ == "__main__":
         #embeddings.append(WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv"))
         #embeddings.append(WordEmbeddings("/home/lief/files/embeddings/cc.pt.300.kv"))
         #word_emb = WordEmbeddings("/home/liefe/.flair/embeddings/cc.pt.300.kv")
-        word_emb = KeyedVectors.load('/home/liefe/.flair/embeddings/cc.pt.300.kv')
+        #word_emb = KeyedVectors.load('/home/liefe/.flair/embeddings/cc.pt.300.kv')
+        word_emb = KeyedVectors.load("/home/lief/files/embeddings/cc.pt.300.kv")
     
     else:
         word_emb = None
@@ -1110,10 +1111,12 @@ if __name__ == "__main__":
         #embeddings.append(CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt", use_cache=False))
         #embeddings.append(CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt", use_cache=False))
         #embeddings.append(CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
-        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))        
-        fw_lm = CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")
-        bw_lm = CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")       
-    
+        #embeddings.append(CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos"))
+        #fw_lm = CharLMEmbeddings("/home/liefe/lm/fw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")
+        #bw_lm = CharLMEmbeddings("/home/liefe/lm/bw/best-lm.pt", use_cache=True, cache_directory="/home/liefe/tag/cache/pos")       
+        fw_lm = CharLMEmbeddings("/home/lief/lm/fw/best-lm.pt")
+        bw_lm = CharLMEmbeddings("/home/lief/lm/bw/best-lm.pt")
+
         # Stack lm embeddings
         lm = StackedEmbeddings([fw_lm, bw_lm])
     
@@ -1131,10 +1134,10 @@ if __name__ == "__main__":
      
     #Train
     print("Beginning training") 
-    tagger.train(args, checkpoint=True, embeddings_in_memory=False)   
+    tagger.train(args, checkpoint=True, embeddings_in_memory=True)   
      
     # Test 
     test_data = corpus.test
-    tagger.evaluate(args, "test",  test_data, test_mode=True, embeddings_in_memory=False)
+    tagger.evaluate(args, "test",  test_data, test_mode=True, embeddings_in_memory=True)
 
      

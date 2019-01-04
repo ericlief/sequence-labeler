@@ -34,6 +34,7 @@ class SequenceTagger:
         # Make the tag dictionary for labels from the corpus
         self.tag_dict = corpus.make_tag_dictionary(tag_type=tag_type)  # id to tag
         n_tags = len(self.tag_dict)
+        #print(self.tag_dict.idx2item)
         
         # Get words in corpus for in task word embeddings 
         if args.use_words:
@@ -170,37 +171,107 @@ class SequenceTagger:
                     # Embed self.chaseqs (list of unique words in the batch) using the character embeddings.
                     embedded_chars = tf.nn.embedding_lookup(self.char_embeddings, self.char_seqs)
                     
-                    # TODO: Use `tf.nn.bidirectional_dynamic_rnn` to process embedded self.charseqs using
-                    # a GRU cell of dimensionality `args.cle_dim`.
-                    cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(args.char_emb_dim)
-                    cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(args.char_emb_dim)
+                    ## TODO: Use `tf.nn.bidirectional_dynamic_rnn` to process embedded self.charseqs using
+                    ## a GRU cell of dimensionality `args.cle_dim`.
+                    #cell_fw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(args.char_emb_dim)
+                    #cell_bw = tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(args.char_emb_dim)
                     
-                    # Dropout wrapper?
-                    if args.locked_dropout:
-                        cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
-                        cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
+                    ## Dropout wrapper?
+                    #if args.locked_dropout:
+                        #cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
+                        #cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
                         
-                    if args.bn_char:
-                        embedded_chars = tf.layers.batch_normalization(embedded_chars, training=self.is_training, name="bn_char")
-                    if args.dropout_char:
-                        embedded_chars = tf.nn.dropout(embedded_chars, 1 - args.dropout_char, name="dropout_char") 
+                    #if args.bn_char:
+                        #embedded_chars = tf.layers.batch_normalization(embedded_chars, training=self.is_training, name="bn_char")
+                    #if args.dropout_char:
+                        #embedded_chars = tf.nn.dropout(embedded_chars, 1 - args.dropout_char, name="dropout_char") 
                         
-                    # Run cell in limited scope fw and bw
-                    # in order to encode char information (subword factors)
-                    # The cell is size of char dim, e.g. 32 -> output (?,32)
-                    _, states = tf.nn.bidirectional_dynamic_rnn(cell_fw, 
-                                                                cell_bw, 
-                                                                inputs=embedded_chars, 
-                                                                sequence_length=self.char_seq_lens, 
-                                                                dtype=tf.float32)
+                    ## Run cell in limited scope fw and bw
+                    ## in order to encode char information (subword factors)
+                    ## The cell is size of char dim, e.g. 32 -> output (?,32)
+                    #_, states = tf.nn.bidirectional_dynamic_rnn(cell_fw, 
+                                                                #cell_bw, 
+                                                                #inputs=embedded_chars, 
+                                                                #sequence_length=self.char_seq_lens, 
+                                                                #dtype=tf.float32)
                     
-                    # Sum the resulting fwd and bwd state to generate character-level word embedding (CLE)
-                    # of unique words in the batch                   
-                    cle = tf.reduce_sum(states, axis=0) 
-                    # Shape = (batch_size, max_sent_len, cle_dim)                                    
-                    embedded_char_seqs = tf.nn.embedding_lookup(cle, self.char_seq_ids)
-                    inputs.append(embedded_char_seqs)
+                    ## Sum the resulting fwd and bwd state to generate character-level word embedding (CLE)
+                    ## of unique words in the batch                   
+                    #cle = tf.reduce_sum(states, axis=0) 
+                    ## Shape = (batch_size, max_sent_len, cle_dim)                                    
+                    #embedded_char_seqs = tf.nn.embedding_lookup(cle, self.char_seq_ids)
+                    #inputs.append(embedded_char_seqs)
             
+            
+            
+                    # For kernel sizes of {2..args.cnne_max}, do the following:
+                    # - use `tf.layers.conv1d` on input embedded characters, with given kernel size
+                    #   and `args.cnne_filters`; use `VALID` padding, stride 1 and no activation.
+                    # - perform channel-wise max-pooling over the whole word, generating output
+                    #   of size `args.cnne_filters` for every word.
+
+                    # 1
+                    # features = []
+                    # for kernel_size in range(2, args.cnne_max + 1):
+                    #     conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                    #     #print(conv)
+                    #     # Apply batch norm
+                    #     if args.bn_char:
+                    #         conv = tf.layers.batch_normalization(conv, training=self.is_training, name='bn_cnn'+str(kernel_size))
+                    #     if args.dropout_char:
+                    #         conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
+                    #     pooling = tf.reduce_max(conv, axis=1)
+                    #     features.append(pooling)
+
+                    # 2
+                    # features = []
+                    # for kernel_size in range(2, args.cnne_max + 1):
+                        
+                    #     conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=tf.nn.relu, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                    #     pooling = tf.reduce_max(conv, axis=1)
+                        
+                    #     # Apply batch norm
+                    #     if args.bn_char:
+                    #         conv = tf.layers.batch_normalization(conv, training=self.is_training, name='bn_cnn'+str(kernel_size))
+                    #     if args.dropout_char:
+                    #         conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
+            
+                    #     features.append(pooling)              
+
+
+                    # 3
+                    features = []
+                    for kernel_size in range(2, args.cnne_max + 1):
+                        
+                        conv = tf.layers.conv1d(embedded_chars, args.cnne_filters, kernel_size, strides=1, padding='VALID', activation=None, use_bias=False, name='cnne_layer_'+str(kernel_size))
+                        
+                        # Apply batch norm
+                        if args.bn_char:
+                            conv = tf.layers.batch_normalization(conv, training=self.is_training, name='bn_cnn'+str(kernel_size))
+                        if args.dropout_char:
+                            conv = tf.nn.dropout(conv, 1 - args.dropout_char, name="dropout_char"+str(kernel_size)) 
+                        
+                        conv = tf.nn.relu(conv)
+                        conv = tf.reduce_max(conv, axis=1)                        
+                        features.append(conv)       
+
+
+
+                    # Concatenate the computed features (in the order of kernel sizes 2..args.cnne_max).
+                    # Consequently, each word from `self.charseqs` is represented using convolutional embedding
+                    # (CNNE) of size `(args.cnne_max-1)*args.cnne_filters`.                
+                    features_concat = tf.concat(features, axis=1)
+                    # Generate CNNEs of all words in the batch by indexing the just computed embeddings
+                    # by self.charseq_ids (using tf.nn.embedding_lookup).
+                    cnne = tf.nn.embedding_lookup(features_concat, self.char_seq_ids)
+                    # Concatenate the word embeddings (computed above) and the CNNE (in this order).
+                    #inputs = tf.concat([inputs, cnne], axis=-1)                          
+                    
+                    inputs.append(cnne)
+                    
+                    
+                    
+                    
             # Concatenate all embeddings
             if len(inputs) > 1:
                 inputs_concat = tf.concat(inputs, axis=-1)      
@@ -232,9 +303,13 @@ class SequenceTagger:
                 raise Exception("Must select an rnn cell type")     
 
             # Add locked/variational dropout wrapper
+            #if args.locked_dropout:
+                # cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout, variational_recurrent=True)
+                # cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout, variational_recurrent=True)
+ # Add locked/variational dropout wrapper
             if args.locked_dropout:
-                cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
-                cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout)
+                cell_fw = tf.nn.rnn_cell.DropoutWrapper(cell_fw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout, state_keep_prob=1, variational_recurrent=True, input_size=inputs_concat.get_shape()[-1], dtype=tf.float32)
+                cell_bw = tf.nn.rnn_cell.DropoutWrapper(cell_bw, input_keep_prob=1-args.locked_dropout, output_keep_prob=1-args.locked_dropout, state_keep_prob=1, variational_recurrent=True, input_size=inputs_concat.get_shape()[-1], dtype=tf.float32)
 
             # Process embedded inputs with rnn cell
             outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw, 
@@ -824,7 +899,7 @@ class SequenceTagger:
         # Write test results
         if test_mode:                
             with open("{}/tagger_tag_test.txt".format(logdir), "w") as test_file:
-                print("# global.columns = ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC PARSEME:MWE", file=test_file)
+                print("# global.columns = ID FORM NO_SPACE PARSEME:MWE", file=test_file)
                 for i in range(len(batches)):
                     for j in range(len(batches[i])): 
                         
@@ -833,7 +908,7 @@ class SequenceTagger:
                         #print(sent_spans)
                         for idx, tokens in sent_spans:
                             first_t = tokens[0]
-                            print(first_t.text)
+                            #print(first_t.text)
                             old_tag = first_t.get_tag("predicted").value
                             #print("old", old_tag)
                             new_tag = str(idx) + ":" + old_tag[2:]
@@ -842,46 +917,32 @@ class SequenceTagger:
                             for token in tokens[1:]:
                                 token.add_tag("predicted", str(idx))                   
                         
-                        print("# text = ", end="", file=test_file)                         
-                        for k in range(len(batches[i][j])):
+                        #print("# text = ", end="", file=test_file)                         
+                        #for k in range(len(batches[i][j])):
                             
-                            # Print sent 
-                            token = batches[i][j][k]
-                            print(token.text, end=" ", file=test_file)
-                        print("", file=test_file)
+                            ## Print sent 
+                            #token = batches[i][j][k]
+                            #print(token.text, end=" ", file=test_file)
+                        #print("", file=test_file)
                         
                         for k in range(len(batches[i][j])):
                             token = batches[i][j][k]
                             #gold_tag = token.get_tag(self.tag_type).value
                             #predicted_tag = token.get_tag('predicted').value
                             if predicted_tag != '':
-                                print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(token.get_tag("idx").value,
-                                                                                          token.text, 
-                                                                                          token.get_tag("lemma").value,
-                                                                                          token.get_tag("upos").value,
-                                                                                          token.get_tag("xpos").value,
-                                                                                          token.get_tag("features").value,
-                                                                                          token.get_tag("parent").value,
-                                                                                          token.get_tag("deprel").value, 
-                                                                                          token.get_tag("deps").value,
-                                                                                          token.get_tag("misc").value,
-                                                                                          token.get_tag("predicted").value),
+                                print("{}\t{}\t_\t{}".format(token.get_tag("idx").value,
+                                                             token.text, 
+                                                             token.get_tag("predicted").value),
                                       file=test_file)
+                                
+                                #print(token.get_tag("predicted").value)
+                                
                             else:
-                                #print('null tag')
+                                print('null tag')
                                 if self.tag_type == "mwe":
-                                    print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(token.get_tag("idx").value,
-                                                                                              token.text, 
-                                                                                              token.get_tag("lemma").value,
-                                                                                              token.get_tag("upos").value,
-                                                                                              token.get_tag("xpos").value,
-                                                                                              token.get_tag("features").value,
-                                                                                              token.get_tag("parent").value,
-                                                                                              token.get_tag("deprel").value, 
-                                                                                              token.get_tag("deps").value,
-                                                                                              token.get_tag("misc").value,
-                                                                                              token.get_tag("predicted").value),
-                                          file=test_file)                             
+                                    print("{}\t{}\t_\t_".format(token.get_tag("idx").value,
+                                                                 token.text),
+                                      file=test_file)
                                 elif self.tag_type == "ne":
                                         print("{} {} O".format(token.text, gold_tag), file=test_file)                                
                                 elif self.tag_type == "pos":
@@ -1095,7 +1156,8 @@ if __name__ == "__main__":
     parser.add_argument("--eval_batch_size", default=32, type=int, help="Batch size for dev.")
     parser.add_argument("--rnn_cell", default="LSTM", type=str, help="RNN cell type.")
     parser.add_argument("--rnn_dim", default=256, type=int, help="RNN cell dimension.")    
-    parser.add_argument("--char_emb_dim", default=256, type=int, help="Char RNN cell dimension.")
+    parser.add_argument("--cnne_filters", default=200, type=int, help="# cnn filters")
+    parser.add_argument("--cnne_max", default=3, type=int, help="Max filter size - 1")    
     parser.add_argument("--optimizer", default="SGD", type=str, help="Optimizer.")    
     parser.add_argument("--momentum", default=None, type=float, help="Momentum.")    
     parser.add_argument("--cle_dim", default=16, type=int, help="Character-level embedding dimension.")
@@ -1168,9 +1230,10 @@ if __name__ == "__main__":
 
 
     tag_type = "mwe"
-    #fh = "/home/liefe/data/pt/mwe/"
-    #fh = "/home/liefe/data/pt/mwe"    
-    fh = "/home/lief/files/data/pt/mwe/mwe10"
+    #fh = "/home/liefe/data/pt/mwe/"    # parseme 1.1 
+    #fh = "/home/liefe/data/pt/mwe/mwe10" # parseme 1.0
+    fh = "/home/lief/files/data/pt/mwe/mwe10" # parseme 1.0
+    
     cols = {0:"idx", 1:"text", 2:"lemma", 3:"upos", 4:"xpos", 5:"features", 6:"parent", 7:"deprel", 8:"deps", 9:"misc", 10:"mwe"}
     #cols = {1:"text", 2:"lemma", 3:"upos", 10:"mwe"}
     
